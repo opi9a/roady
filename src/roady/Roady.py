@@ -60,17 +60,17 @@ class Roady:
                 json.dump(self.overview, fp, indent=4)
         else:
             with open(self.overview_path, 'r') as fp:
-                self.overview_path = json.load(fp)
+                self.overview = json.load(fp)
 
         # get raw stages - scrape if not already saved
-        self.raw_stages_path = self.tour_dir / 'stages_raw_stages.json'
+        self.raw_stages_path = self.tour_dir / 'stages.json'
         if not self.raw_stages_path.exists():
             self.raw_stages = make_raw_stages_list(self.tour, self.year)
             with open(self.raw_stages_path, 'w') as fp:
                 json.dump(self.raw_stages, fp, indent=4)
         else:
             with open(self.raw_stages_path, 'r') as fp:
-                self.raw_stages_path = json.load(fp)
+                self.raw_stages = json.load(fp)
 
         # make the composed stages
         self.stages = compose_stages(self.raw_stages, self.overview)
