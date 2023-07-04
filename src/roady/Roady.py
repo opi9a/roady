@@ -13,6 +13,16 @@ from .scraping import (get_overview, get_riders,
                        get_stage_urls, scrape_stage)
 
 class Roady:
+    """
+    Scrapes and holds data for making a roadbook
+
+    >>> rd = Roady('tour', 2023)
+    >>> rd.make_roadbook_pdf()
+
+    this will make a roadbook and save it by default at
+    ~/.tour_roadbooks/tour_2023/roadbook.pdf
+
+    """
 
     def __init__(self, tour, year, data_dir=None):
 
@@ -68,15 +78,19 @@ class Roady:
         # pdf location
         self.pdf_fp = self.tour_dir / 'roadbook.pdf'
 
-
-    def make_roadbook_pdf(self, data_dir=None):
+    def make_roadbook_pdf(self, pdf_fp=None):
         """
         Write it out
         """
-        # set up the pdf canvas
-        print('Now making roadbook pdf at', self.pdf_fp)
+        if pdf_fp is None:
+            pdf_fp = self.pdf_fp
+        else:
+            pdf_fp = Path(pdf_fp)
 
-        canvas = Canvas(self.pdf_fp.as_posix(), pagesize=A4, bottomup=True)
+        # set up the pdf canvas
+        print('Now making roadbook pdf at', pdf_fp)
+
+        canvas = Canvas(pdf_fp.as_posix(), pagesize=A4, bottomup=True)
 
         # do the front page(s)
         make_front_pages(self.stages, self.tour_map_url,
