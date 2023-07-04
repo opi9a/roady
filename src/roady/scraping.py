@@ -50,7 +50,7 @@ def get_overview(tour, year, soup=None):
     return out
 
 
-def get_riders(url=None, soup=None):
+def get_teams(url=None, soup=None):
     """
     Return a dict of riders with numbers by team
     """
@@ -62,18 +62,18 @@ def get_riders(url=None, soup=None):
     # this makes a list of block elements, one per team
     blocks = soup.find_all(attrs={'class': 'block'})
 
-    out = {}
+    teams = {}
     for block in blocks:
         team = block.find('i').text
-        out[team] = {}
+        teams[team] = {}
 
         riders_str = block.text.split(team)[1]
         riders = re.split(" \d{1,3} ", riders_str)[1:]
         numbers = re.split("\D*\s", riders_str)[1:-1]
 
-        out[team] = dict(zip(numbers, riders))
+        teams[team] = dict(zip(numbers, riders))
 
-    return out
+    return teams
 
 
 def get_stage_urls(base_url, start=1, end=21):

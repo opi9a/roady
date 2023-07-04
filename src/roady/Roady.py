@@ -8,8 +8,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen.canvas import Canvas
 
 from .constants import DATA_DIR, BASE_URLS
-from .make_pdf import make_pdf, make_front_pages
-from .scraping import (get_overview, get_riders,
+from .make_pdf import make_pdf, make_front_page, print_teams
+from .scraping import (get_overview, get_teams,
                        get_stage_urls, scrape_stage)
 
 class Roady:
@@ -21,7 +21,6 @@ class Roady:
 
     this will make a roadbook and save it by default at
     ~/.tour_roadbooks/tour_2023/roadbook.pdf
-
     """
 
     def __init__(self, tour, year, data_dir=None):
@@ -48,9 +47,19 @@ class Roady:
         # get overall route img url
         self.tour_map_url = make_tour_map_url(self.tour, self.year)
 
-        # scrape riders list
-        self.riders_url = make_riders_url(self.tour, self.year)
-        self.riders = get_riders(self.riders_url)
+        # scrape teams
+        teams_json = self.tour_dir / 'teams.json'
+
+        if teams_json.exists():
+            with open(teams_json, 'r') as fp:
+                self.teams = json.load(fp)
+        else:
+            teams_url = make_teams_url(self.tour, self.year)
+            self.teams = get_teams(teams_url)
+
+            with open(teams_json, 'w') as fp:
+                print('saving teams to', teams_json)
+                json.dump(self.teams, fp, indent=4)
 
         # get overview - scrape if not already saved
         self.overview_path = self.tour_dir / 'stages_overview.json'
@@ -93,8 +102,11 @@ class Roady:
         canvas = Canvas(pdf_fp.as_posix(), pagesize=A4, bottomup=True)
 
         # do the front page(s)
-        make_front_pages(self.stages, self.tour_map_url,
-                         self.riders, canvas, imgs_dir=self.imgs_dir) 
+        make_front_page(self.stages, self.tour_map_url,
+                        canvas, imgs_dir=self.imgs_dir) 
+
+        # print teams
+        print_teams(self.teams, canvas=canvas)
 
         # iterate over stages
         print('stage', end=" ")
@@ -117,7 +129,7 @@ def make_tour_map_url(tour, year, imgs_dir=None):
     return f"https://cdn.cyclingstage.com/images/{tour}/{year}/route.jpg"
 
 
-def make_riders_url(tour, year):
+def make_teams_url(tour, year):
     """
     Return the url
     """
