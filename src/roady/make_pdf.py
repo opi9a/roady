@@ -6,12 +6,29 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.colors import blue, black, red, green, grey
 from reportlab.lib.units import cm
 from reportlab.pdfgen.canvas import Canvas
-from reportlab.lib.styles import ParagraphStyle
+
+from PIL import Image
+from PIL.ExifTags import TAGS
 
 
-from .constants import THIS_DIR
+def make_front_pages(stage_dict, img_url, riders, canvas, imgs_dir=None):
+    """
+    List of stages and map
+    """
+    i_dict = get_image(img_url, imgs_dir)
 
-IMG_DIR = THIS_DIR / 'imgs'
+    h, w = scale_image(i_dict['height'], i_dict['width'],
+                       20, 16)
+
+    canvas.drawInlineImage(
+        i_dict['path'].as_posix(),
+        x = 2*cm,
+        y = 15*cm,
+        height = h * cm,
+        width = w * cm,
+    )
+
+    canvas.showPage()
 
 
 def make_pdf(stage_dict, canvas=None, outpath=None, imgs_dir=None):
@@ -24,37 +41,71 @@ def make_pdf(stage_dict, canvas=None, outpath=None, imgs_dir=None):
     if canvas is None:
         out_fp = Path(outpath).as_posix()
         canvas = Canvas(out_fp, pagesize=A4, bottomup=True)
+        canvas.setFontSize(18)
         file_output = True
 
 
     x, y = 0, 0
 
-    top = 27*cm
-    bottom = 2*cm
-    left = 2*cm
-    right = 18*cm
+    top = 27
+    bottom = 2
+    left = 2
+    right = 18
 
     title = (f"Stage {stage_dict['stage_no']}: {stage_dict['date']} "
-             f"----- {stage_dict['from_to']}")
-    canvas.drawString(left, top - 1, title)
+             f"----- {stage_dict['from_to']}"
+             f"  {stage_dict['type']}  : {stage_dict['distance']:.1f} km"
+            )
+    canvas.drawString(left*cm, top*cm, title)
 
-    h2 = 10*cm
-    canvas.drawInlineImage(
-        get_image(stage_dict['profile'], imgs_dir).as_posix(),
-        x = left,
-        y = 2*cm,
-        width = right - left,
-        height = h2,
+    i_dict = {}
+
+    i_dict['route'] = get_image(stage_dict['route'], imgs_dir)
+    i_dict['profile'] = get_image(stage_dict['profile'], imgs_dir)
+
+    h, w = scale_image(
+        i_dict['route']['height'],
+        i_dict['route']['width'],
+        max_h = 15,
+        max_w = right - left,
     )
 
-    h1 = 13*cm
+    i_dict['route']['plot_height'] = h
+    i_dict['route']['plot_width'] = w
+
+    h, w = scale_image(
+        i_dict['profile']['height'],
+        i_dict['profile']['width'],
+        max_h = 15,
+        max_w = right - left,
+    )
+
+    i_dict['profile']['plot_height'] = h
+    i_dict['profile']['plot_width'] = w
+
+
+    # the profile first, at top
+    canvas.drawInlineImage(
+        i_dict['profile']['path'].as_posix(),
+        x = left*cm,
+        y = (top - (2 + i_dict['profile']['plot_height']))*cm,
+        height = i_dict['profile']['plot_height'] * cm,
+        width = i_dict['profile']['plot_width'] * cm,
+    )
+
     if 'route' in stage_dict.keys():
+        y = top - (
+                2 # allowance for title
+                + i_dict['profile']['plot_height']
+                + 2 # gap
+                + i_dict['route']['plot_height']
+            )
         canvas.drawInlineImage(
-            get_image(stage_dict['route'], imgs_dir).as_posix(),
-            x = left,
-            y = top - (4*cm) - h2,
-            width = right - left,
-            height = h1,
+            i_dict['route']['path'].as_posix(),
+            x = left*cm,
+            y = y*cm,
+            height = i_dict['route']['plot_height'] * cm,
+            width = i_dict['route']['plot_width'] * cm,
         )
 
     # ends the page
@@ -63,10 +114,12 @@ def make_pdf(stage_dict, canvas=None, outpath=None, imgs_dir=None):
     if file_output:
         canvas.save()
 
+    return i_dict
+
 
 def get_image(url, dirpath):
     """
-    download the image
+    download the image and return a dict with the path, height, width
     """
 
     img_path = Path(dirpath) / Path(url).name
@@ -82,6 +135,24 @@ def get_image(url, dirpath):
 
         del req
 
-    return img_path
+    image = Image.open(img_path)
+
+    return {
+        'path': img_path,
+        'height': image.height,
+        'width': image.width,
+    }
 
 
+def scale_image(i_h, i_w, max_h, max_w):
+    """
+    For passed image height and width, and max values,
+    return the height and width to print
+    """
+
+    # image too tall, scale to max height
+    if i_h / i_w > max_h / max_w:
+        return max_h, i_w * (max_h / i_h)
+
+    # too wide, scale to max width
+    return i_h * (max_w / i_w), max_w
