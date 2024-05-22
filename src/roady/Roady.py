@@ -23,7 +23,9 @@ class Roady:
     ~/.tour_roadbooks/tour_2023/roadbook.pdf
     """
 
-    def __init__(self, tour, year, data_dir=None):
+    def __init__(self, tour, year, data_dir=None,
+                 reload_teams=False, reload_overview=False,
+                 reload_stages=False):
 
         self.tour = tour
         self.year = year
@@ -49,13 +51,14 @@ class Roady:
 
         # scrape teams
         teams_json = self.tour_dir / 'teams.json'
+        self.teams_url = None
 
-        if teams_json.exists():
+        if teams_json.exists() and not reload_teams:
             with open(teams_json, 'r') as fp:
                 self.teams = json.load(fp)
         else:
-            teams_url = make_teams_url(self.tour, self.year)
-            self.teams = get_teams(teams_url)
+            self.teams_url = make_teams_url(self.tour, self.year)
+            self.teams = get_teams(self.teams_url)
 
             with open(teams_json, 'w') as fp:
                 print('saving teams to', teams_json)
@@ -63,7 +66,7 @@ class Roady:
 
         # get overview - scrape if not already saved
         self.overview_path = self.tour_dir / 'stages_overview.json'
-        if not self.overview_path.exists():
+        if not self.overview_path.exists() or reload_overview:
             self.overview = get_overview(self.tour, self.year)
             with open(self.overview_path, 'w') as fp:
                 json.dump(self.overview, fp, indent=4)
@@ -73,7 +76,7 @@ class Roady:
 
         # get raw stages - scrape if not already saved
         self.raw_stages_path = self.tour_dir / 'stages.json'
-        if not self.raw_stages_path.exists():
+        if not self.raw_stages_path.exists() or reload_stages:
             self.raw_stages = make_raw_stages_list(self.tour, self.year)
             with open(self.raw_stages_path, 'w') as fp:
                 json.dump(self.raw_stages, fp, indent=4)
@@ -102,8 +105,11 @@ class Roady:
         canvas = Canvas(pdf_fp.as_posix(), pagesize=A4, bottomup=True)
 
         # do the front page(s)
-        make_front_page(self.stages, self.tour_map_url,
-                        canvas, imgs_dir=self.imgs_dir) 
+        try:
+            make_front_page(self.stages, self.tour_map_url,
+                            canvas, imgs_dir=self.imgs_dir) 
+        except:
+            print('cannot make front page')
 
         # print teams
         print_teams(self.teams, canvas=canvas)
@@ -125,6 +131,8 @@ def make_tour_map_url(tour, year, imgs_dir=None):
 
     if tour == 'tour':
         tour = 'tour-de-france'
+    elif tour == 'vuelta':
+        tour = 'vuelta-spain'
 
     return f"https://cdn.cyclingstage.com/images/{tour}/{year}/route.jpg"
 
@@ -170,5 +178,17 @@ def compose_stages(raw_stages, overview):
         stage['distance'] = overview[i]['distance']
         stage['type'] = overview[i]['type']
 
+        stage = clean_stage(stage)
+
     return stages
+
+
+def clean_stage(stage):
+    """
+    Use this to catch known typos
+    """
+
+    stage['date'] = stage['date'].replace('Saturdag', 'Saturday')
+
+    return stage
 

@@ -2,14 +2,31 @@ from pathlib import Path
 import requests
 import shutil
 import re
+from collections import namedtuple
 from datetime import datetime, timedelta
+from reportlab.pdfgen.canvas import Canvas
 from reportlab.lib.pagesizes import A4
 
-from reportlab.lib.colors import blue, black, red, green, grey
+from reportlab.lib.colors import blue, black, red, green
 from reportlab.lib.units import cm
 
 from PIL import Image
 from PIL.ExifTags import TAGS
+
+class Rect:
+    """
+    Use this to hold coords for rectantles on the page,
+    eg profile, route
+    """
+    def __init__(self, bottom=None, top=None, height=None,
+                 left=None, right=None, width=None):
+
+        self.bottom = bottom
+        self.top = top
+        self.height = height
+        self.left = left
+        self.right = right
+        self.width = width
 
 
 def make_front_page(stages, img_url, canvas, imgs_dir=None):
@@ -39,6 +56,7 @@ def make_front_page(stages, img_url, canvas, imgs_dir=None):
 
     h, w = scale_image(i_dict['height'], i_dict['width'],
                        width, route_h)
+
 
     canvas.drawInlineImage(
         i_dict['path'].as_posix(),
@@ -78,8 +96,8 @@ def make_front_page(stages, img_url, canvas, imgs_dir=None):
     # column headings
     col_xs = {
         'date': 2,
-        'stage_no': 5.5,
-        'from_to': 6.5,
+        'stage_no': 6.5,
+        'from_to': 7.5,
         'distance': 15,
         'type': 17,
     }
@@ -116,10 +134,15 @@ def make_front_page(stages, img_url, canvas, imgs_dir=None):
     canvas.showPage()
 
 
-def make_pdf(stage_dict, canvas=None, outpath=None, imgs_dir=None):
+def make_pdf(stage_dict, canvas=None, outpath=None, imgs_dir=None,
+             km_to_go=False, l_kms_marg=0, r_kms_marg=0, 
+             start_finish_km_only=False):
     """
+    Compose a pdf page for a stage.
     Pass a canvas or an outpath
-
+    l_kms_marg and r_kms_marg for aligning the kms to go with start and
+    end within profile img
+    start_finish_km_only just shows those, for aligning
     """
 
     file_output = False
@@ -129,13 +152,13 @@ def make_pdf(stage_dict, canvas=None, outpath=None, imgs_dir=None):
         canvas.setFontSize(18)
         file_output = True
 
-
     x, y = 0, 0
 
     top = 27
     bottom = 2
     left = 2
     right = 18
+    top_margin = 1
 
     canvas.setFont("Helvetica-Bold", 20)
     title = (f"Stage {stage_dict['stage_no']} - {stage_dict['date']}")
@@ -145,6 +168,8 @@ def make_pdf(stage_dict, canvas=None, outpath=None, imgs_dir=None):
 
     i_dict['route'] = get_image(stage_dict['route'], imgs_dir)
     i_dict['profile'] = get_image(stage_dict['profile'], imgs_dir)
+    print(f"h: {i_dict['profile']['height']}, "
+          f"w: {i_dict['profile']['height']}", end=" - ")
 
     h, w = scale_image(
         i_dict['route']['height'],
@@ -152,6 +177,9 @@ def make_pdf(stage_dict, canvas=None, outpath=None, imgs_dir=None):
         max_h = 14,
         max_w = right - left,
     )
+    scale_factor = h / i_dict['route']['height']
+    scale_factor_w = w / i_dict['route']['width']
+    print(f"scaled by {scale_factor:.4f}")
 
     i_dict['route']['plot_height'] = h
     i_dict['route']['plot_width'] = w
@@ -168,14 +196,59 @@ def make_pdf(stage_dict, canvas=None, outpath=None, imgs_dir=None):
 
 
     # the profile first, at top
+    profile = Rect(
+        bottom = top - (top_margin + i_dict['profile']['plot_height']),
+        height = i_dict['profile']['plot_height'],
+        width = i_dict['profile']['plot_width'],
+        top = top - top_margin,
+    )
+
     canvas.drawInlineImage(
         i_dict['profile']['path'].as_posix(),
         x = left*cm,
-        y = (top - (1 + i_dict['profile']['plot_height']))*cm,
-        height = i_dict['profile']['plot_height'] * cm,
-        width = i_dict['profile']['plot_width'] * cm,
+        y = profile.bottom * cm,
+        height =  profile.height * cm,
+        width = profile.width* cm,
     )
 
+
+    # ADD A TO-GO SCALE TO THE PROFILE
+    # set up dimensions and location of to-go scale
+
+    # get the stage distance, d, and the width of the image
+    # draw a vertical line each 10km from end
+    scale_l = left + l_kms_marg
+    scale_r = scale_l + i_dict['profile']['plot_width'] - r_kms_marg
+    scale_w = scale_r - scale_l
+
+    # draw the scale
+    if km_to_go and not start_finish_km_only:
+        print_km_to_go(
+            canvas=canvas,
+            start_x=scale_r, scale_w=scale_w,
+            stage_km=stage_dict['distance'],
+            y0=profile.bottom,
+            y1=profile.top,
+            minor_unit=1,
+        )
+    elif start_finish_km_only:
+        canvas.setStrokeColor("red")
+        canvas.line(
+            scale_l * cm,  # x1
+            profile.bottom * cm,  # y1
+            scale_l * cm,  # x2
+            profile.top * cm  # y2
+        )
+        canvas.line(
+            scale_r * cm,  # x1
+            profile.bottom * cm,  # y1
+            scale_r * cm,  # x2
+            profile.top * cm  # y2
+        )
+
+    canvas.setFillAlpha(1)
+
+    # the route
     if 'route' in stage_dict.keys():
         y = top - (
                 2 # allowance for title
@@ -198,6 +271,61 @@ def make_pdf(stage_dict, canvas=None, outpath=None, imgs_dir=None):
         canvas.save()
 
     return i_dict
+
+
+def print_km_to_go(canvas, start_x, scale_w, stage_km, y0, y1,
+                   minor_unit=1):
+    """
+    Make the togo scale
+    """
+    # work out the decrement for the chosen interval (kms)
+    dec_1k = scale_w / float(stage_km)
+    decrement = dec_1k * minor_unit
+
+    canvas.setStrokeColor("lightblue")
+    canvas.setFillColor("lightblue", alpha=0.9)  # for text
+    canvas.setFontSize(8)
+
+    k_to_go = 0
+    line_x = start_x
+
+    while k_to_go < float(stage_km):
+        if k_to_go > 0:
+            
+            # major units are thicker (by alpha)
+            if k_to_go % 10 == 0:
+                canvas.setStrokeAlpha(0.4)
+            elif k_to_go % 5 == 0:
+                canvas.setStrokeAlpha(0.2)
+            else:
+                canvas.setStrokeAlpha(0.0)
+
+            canvas.line(
+                line_x * cm,  # x1
+                y0 * cm,  # y1
+                line_x * cm,  # x2
+                y1 * cm  # y2
+            )
+
+        # always draw top number
+        if k_to_go % 10 == 0:
+            x_nudge = calc_x_nudge(k_to_go)
+            canvas.drawString(
+                (line_x - x_nudge)*cm,
+                y1 * cm,  # y2
+                str(k_to_go)
+            )
+        # at bottom, 0 and 10 overlap the stage length in img
+            if k_to_go >= 20:
+                canvas.drawString(
+                    (line_x - x_nudge)*cm,
+                    (y0-0.2)*cm,
+                    # (y_start-0.2)*cm,
+                    str(k_to_go)
+                )
+
+        k_to_go += minor_unit
+        line_x -= decrement
 
 
 def get_image(url, dirpath):
@@ -235,15 +363,18 @@ def scale_image(i_h, i_w, max_h, max_w):
 
     # image too tall, scale to max height
     if i_h / i_w > max_h / max_w:
-        return max_h, i_w * (max_h / i_h)
+        out = max_h, i_w * (max_h / i_h)
 
     # too wide, scale to max width
-    return i_h * (max_w / i_w), max_w
+    else:
+        out = i_h * (max_w / i_w), max_w
+
+    return  out
 
 
 def print_teams(teams, canvas, cols=4):
     """
-    xx
+    Teams with riders by number on single page
     """
     top = 28
     bottom = 2
@@ -278,6 +409,7 @@ def print_team(team, riders,
                x, y, h, w,
                canvas):
     """
+    Print the individual team in a column
     """
 
     x = x * cm
@@ -294,7 +426,23 @@ def print_team(team, riders,
     for num, rider in riders.items():
         new_y = y - (lh * i)
         canvas.setFont("Helvetica", 8)
-        canvas.drawString(x, new_y, f"{num:>3}, {rider}")
+        canvas.drawString(x, new_y, f"{num:>3} {rider}")
         i += 1
 
+
+def calc_x_nudge(k_to_go):
+    """
+    Return the amount to nudge the k_to_go leftwards to align
+    with the line that was drawn
+    """
+    # just set the nudges manually
+    nudge_by_dig = [0, 0.25, 0.41]
+
+    if k_to_go < 10:
+        return nudge_by_dig[0]
+
+    if k_to_go < 100:
+        return nudge_by_dig[1]
+
+    return nudge_by_dig[2]
 

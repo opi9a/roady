@@ -39,7 +39,7 @@ def get_overview(tour, year, soup=None):
                 'stage': stage,
                 'date': tds[i+1].text,
                 'title': tds[i+2].text.split(str(stage))[-1].strip(),
-                'distance': float(tds[i+3].text),
+                'distance': float(tds[i+3].text.replace(',', '.')),
                 'type': tds[i+4].text,
             })
             i += 5
@@ -50,7 +50,7 @@ def get_overview(tour, year, soup=None):
     return out
 
 
-def get_teams(url=None, soup=None):
+def get_teams(url=None, soup=None, just_return_soup=False):
     """
     Return a dict of riders with numbers by team
     """
@@ -58,6 +58,9 @@ def get_teams(url=None, soup=None):
     if soup is None:
         req = requests.get(url)
         soup = BeautifulSoup(req.text, 'html.parser')
+
+        if just_return_soup:
+            return soup
 
     # this makes a list of block elements, one per team
     blocks = soup.find_all(attrs={'class': 'block'})
@@ -68,7 +71,7 @@ def get_teams(url=None, soup=None):
         teams[team] = {}
 
         riders_str = block.text.split(team)[1]
-        riders = re.split(" \d{1,3} ", riders_str)[1:]
+        riders = re.split(" \d{1,3}\.? ", riders_str)[1:]
         numbers = re.split("\D*\s", riders_str)[1:-1]
 
         teams[team] = dict(zip(numbers, riders))
@@ -109,6 +112,7 @@ def scrape_stage(url, soup=None, return_soup=False):
 
     stage_date, description = get_description(soup)
 
+    out['url'] = url
     out['date'] = stage_date
     out['stage_no'] = int(stage_no)
 
