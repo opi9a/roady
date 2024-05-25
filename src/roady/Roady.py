@@ -21,6 +21,9 @@ class Roady:
 
     this will make a roadbook and save it by default at
     ~/.tour_roadbooks/tour_2023/roadbook.pdf
+
+    TODO handle if teams url or tour map url are not as expected
+    TODO handle stupid dates
     """
 
     def __init__(self, tour, year, data_dir=None,
