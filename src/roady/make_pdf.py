@@ -12,7 +12,8 @@ from PIL import Image
 from PIL.ExifTags import TAGS
 
 
-def make_front_page(stages, img_url, canvas, imgs_dir=None):
+def make_front_page(stages, img_url, canvas, imgs_dir=None,
+                    tour=None, year=None):
     """
     List of stages and map
     """
@@ -26,8 +27,9 @@ def make_front_page(stages, img_url, canvas, imgs_dir=None):
     route_h = 17
 
     # title - have to infer tour and year
-    tour, year = re.search("images/(\S*)/(\d*)/route.jpg", img_url).groups()
-    tour = tour.title().replace('-', ' ').replace("De", "de")
+    if tour is None and year is None:
+        tour, year = re.search("images/(\S*)/(\d*)/route.jpg", img_url).groups()
+        tour = tour.title().replace('-', ' ').replace("De", "de")
 
     canvas.setFont("Helvetica-Bold", 20)
     canvas.drawString((left + 5) * cm, (top - title_h) * cm,

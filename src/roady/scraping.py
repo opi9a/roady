@@ -39,7 +39,7 @@ def get_overview(tour, year, soup=None):
                 'stage': stage,
                 'date': tds[i+1].text,
                 'title': tds[i+2].text.split(str(stage))[-1].strip(),
-                'distance': float(tds[i+3].text),
+                'distance': float(tds[i+3].text.replace(',', '.')),
                 'type': tds[i+4].text,
             })
             i += 5
@@ -50,7 +50,7 @@ def get_overview(tour, year, soup=None):
     return out
 
 
-def get_teams(url=None, soup=None):
+def get_teams(url=None, soup=None, just_return_soup=False):
     """
     Return a dict of riders with numbers by team
     """
@@ -58,6 +58,9 @@ def get_teams(url=None, soup=None):
     if soup is None:
         req = requests.get(url)
         soup = BeautifulSoup(req.text, 'html.parser')
+
+        if just_return_soup:
+            return soup
 
     # this makes a list of block elements, one per team
     blocks = soup.find_all(attrs={'class': 'block'})
@@ -68,7 +71,7 @@ def get_teams(url=None, soup=None):
         teams[team] = {}
 
         riders_str = block.text.split(team)[1]
-        riders = re.split(" \d{1,3} ", riders_str)[1:]
+        riders = re.split(" \d{1,3}\.? ", riders_str)[1:]
         numbers = re.split("\D*\s", riders_str)[1:-1]
 
         teams[team] = dict(zip(numbers, riders))
@@ -95,6 +98,8 @@ def scrape_stage(url, soup=None, return_soup=False):
     """
     Just get urls of resources?
     """
+
+
     stage_no = re.search('stage-(\d*)-', url).groups()[0]
     print('in stage', stage_no)
 
@@ -105,26 +110,37 @@ def scrape_stage(url, soup=None, return_soup=False):
         if return_soup:
             return soup
 
-    out = {}
-
     stage_date, description = get_description(soup)
 
-    out['date'] = stage_date
-    out['stage_no'] = int(stage_no)
+    out = {
+        "url": url,
+        "date": stage_date,
+        "stage_no": int(stage_no),
+        "from_to": None,
+        "description": None,
+        "route": None,
+        "profile": None,
+        "times": None,
+        "climbs": None,
+        "imap": None,
+    }
+
 
     title_text = soup.find('h1').text
     out['from_to'] = title_text.split(':')[1].strip()
     out['description'] = description
 
-    # all useful jpegs
-    jpgs = soup.find_all(attrs={'content': re.compile('cdn.*stage')})
+    # all useful jpegs urls
+    jpgs = [
+        x['content']
+        for x in soup.find_all(attrs={'content': re.compile('cdn.*stage')})
+    ]
 
-    pattern = f'stage-{stage_no}-(.*).jpg'
     for jpg in jpgs:
-        jpg_url = jpg['content']
-        res = re.search(pattern, jpg_url)
-        if res is not None:
-            out[res.groups()[0]] = jpg_url
+        if 'route.jpg' in jpg:
+            out['route'] = jpg
+        if 'profile.jpg' in jpg:
+            out['profile'] = jpg
 
     # scheduled times
     res = soup.find(attrs={'title': re.compile('scheduled')})

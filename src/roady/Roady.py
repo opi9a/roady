@@ -21,17 +21,21 @@ class Roady:
 
     this will make a roadbook and save it by default at
     ~/.tour_roadbooks/tour_2023/roadbook.pdf
+
+    may need to pass teams url or tour_map_url separately
     """
 
-    def __init__(self, tour, year, data_dir=None):
+    def __init__(self, tour, year, data_dir=None,
+                 teams_url=None, tour_map_url=None):
 
         self.tour = tour
         self.year = year
+        self.base_url = BASE_URLS[tour].format(year, {}, year)
 
         if data_dir is None:
             self.data_dir = DATA_DIR
         else:
-            self.data_dir = Path(data_dir)
+            self.data_dir = Path(data_dir).expanduser()
 
         self.tour_dir = self.data_dir / f'{tour}_{year}'
         self.imgs_dir = self.tour_dir / 'imgs'
@@ -45,7 +49,11 @@ class Roady:
             self.imgs_dir.mkdir()
 
         # get overall route img url
-        self.tour_map_url = make_tour_map_url(self.tour, self.year)
+                
+        if tour_map_url is None:
+            self.tour_map_url = make_tour_map_url(self.tour, self.year)
+        else:
+            self.tour_map_url = tour_map_url
 
         # scrape teams
         teams_json = self.tour_dir / 'teams.json'
@@ -54,7 +62,12 @@ class Roady:
             with open(teams_json, 'r') as fp:
                 self.teams = json.load(fp)
         else:
-            teams_url = make_teams_url(self.tour, self.year)
+            # nb this may not make right url - format different each year
+            if teams_url is None:
+                self.teams_url = make_teams_url(self.tour, self.year)
+            else:
+                self.teams_url = teams_url
+
             self.teams = get_teams(teams_url)
 
             with open(teams_json, 'w') as fp:
@@ -74,7 +87,7 @@ class Roady:
         # get raw stages - scrape if not already saved
         self.raw_stages_path = self.tour_dir / 'stages.json'
         if not self.raw_stages_path.exists():
-            self.raw_stages = make_raw_stages_list(self.tour, self.year)
+            self.raw_stages = make_raw_stages_list(self.base_url)
             with open(self.raw_stages_path, 'w') as fp:
                 json.dump(self.raw_stages, fp, indent=4)
         else:
@@ -94,7 +107,7 @@ class Roady:
         if pdf_fp is None:
             pdf_fp = self.pdf_fp
         else:
-            pdf_fp = Path(pdf_fp)
+            pdf_fp = Path(pdf_fp).expanduser()
 
         # set up the pdf canvas
         print('Now making roadbook pdf at', pdf_fp)
@@ -103,7 +116,8 @@ class Roady:
 
         # do the front page(s)
         make_front_page(self.stages, self.tour_map_url,
-                        canvas, imgs_dir=self.imgs_dir) 
+                        canvas, imgs_dir=self.imgs_dir,
+                        tour=self.tour, year=self.year) 
 
         # print teams
         print_teams(self.teams, canvas=canvas)
@@ -126,7 +140,15 @@ def make_tour_map_url(tour, year, imgs_dir=None):
     if tour == 'tour':
         tour = 'tour-de-france'
 
-    return f"https://cdn.cyclingstage.com/images/{tour}/{year}/route.jpg"
+    url = f"https://cdn.cyclingstage.com/images/{tour}/{year}/route.jpg"
+
+    req = requests.get(url)
+
+    if not req.ok:
+        raise ValueError("Looks like overall map url is not right. "
+                         "Can pass directly when instantiating Roady")
+
+    return url
 
 
 def make_teams_url(tour, year):
@@ -136,19 +158,24 @@ def make_teams_url(tour, year):
 
     base = BASE_URLS[tour].format(year, year, year)
 
-    return base.replace(f"-route/stage-{year}-", "/riders-")
+    url = base.replace(f"-route/stage-{year}-", "/riders-")
+
+    req = requests.get(url)
+
+    if not req.ok:
+        raise ValueError("Looks like teams url is not right. "
+                         "Can pass directly when instantiating Roady")
+    return url
 
 
-def make_raw_stages_list(tour, year):
+def make_raw_stages_list(base_url):
     """
     Get the urls, then scrape each to make jsons of resources
     Also scrapes the front page overview which has info on length,
     type of stage etc.
     """
 
-    base = BASE_URLS[tour].format(year, {}, year)
-
-    urls = get_stage_urls(base)
+    urls = get_stage_urls(base_url)
 
     stages = [scrape_stage(url) for url in urls]
 
@@ -170,5 +197,23 @@ def compose_stages(raw_stages, overview):
         stage['distance'] = overview[i]['distance']
         stage['type'] = overview[i]['type']
 
+        stage['date'] = fix_date(stage['date'])
+        
+
     return stages
+
+
+def fix_date(dt_str):
+    """ 
+    Fix up any errors found in the site's dates - it happens
+    """
+
+    if 'dag' in dt_str:
+        dt_str = dt_str.replace('dag', 'day')
+
+    if 'Juli' in dt_str:
+        dt_str = dt_str.replace('Juli', 'July')
+
+    return dt_str
+
 
