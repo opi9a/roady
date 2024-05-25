@@ -22,21 +22,23 @@ class Roady:
     this will make a roadbook and save it by default at
     ~/.tour_roadbooks/tour_2023/roadbook.pdf
 
-    TODO handle if teams url or tour map url are not as expected
-    TODO handle stupid dates
+    May need to pass tour_map_url or teams_url separately,
+    as can be unpredictable
     """
 
     def __init__(self, tour, year, data_dir=None,
                  reload_teams=False, reload_overview=False,
-                 reload_stages=False):
+                 reload_stages=False, teams_url=None, tour_map_url=None):
+
 
         self.tour = tour
         self.year = year
+        self.base_url = BASE_URLS[tour].format(year, {}, year)
 
         if data_dir is None:
             self.data_dir = DATA_DIR
         else:
-            self.data_dir = Path(data_dir)
+            self.data_dir = Path(data_dir).expanduser()
 
         self.tour_dir = self.data_dir / f'{tour}_{year}'
         self.imgs_dir = self.tour_dir / 'imgs'
@@ -50,7 +52,10 @@ class Roady:
             self.imgs_dir.mkdir()
 
         # get overall route img url
-        self.tour_map_url = make_tour_map_url(self.tour, self.year)
+        if tour_map_url is None:
+            self.tour_map_url = make_tour_map_url(self.tour, self.year)
+        else:
+            self.tour_map_url = tour_map_url
 
         # scrape teams
         teams_json = self.tour_dir / 'teams.json'
@@ -60,7 +65,11 @@ class Roady:
             with open(teams_json, 'r') as fp:
                 self.teams = json.load(fp)
         else:
-            self.teams_url = make_teams_url(self.tour, self.year)
+            # nb this may not make right url - format different each year
+            if teams_url is None:
+                self.teams_url = make_teams_url(self.tour, self.year)
+            else:
+                self.teams_url = teams_url
             self.teams = get_teams(self.teams_url)
 
             with open(teams_json, 'w') as fp:
@@ -134,10 +143,18 @@ def make_tour_map_url(tour, year, imgs_dir=None):
 
     if tour == 'tour':
         tour = 'tour-de-france'
-    elif tour == 'vuelta':
-        tour = 'vuelta-spain'
 
-    return f"https://cdn.cyclingstage.com/images/{tour}/{year}/route.jpg"
+    url = f"https://cdn.cyclingstage.com/images/{tour}/{year}/route.jpg"
+
+    req = requests.get(url)
+
+    if not req.ok:
+        raise ValueError("Looks like overall map url is not right. "
+                         "Can pass directly when instantiating Roady")
+
+    return url
+
+
 
 
 def make_teams_url(tour, year):
@@ -147,19 +164,25 @@ def make_teams_url(tour, year):
 
     base = BASE_URLS[tour].format(year, year, year)
 
-    return base.replace(f"-route/stage-{year}-", "/riders-")
+    url = base.replace(f"-route/stage-{year}-", "/riders-")
+
+    req = requests.get(url)
+
+    if not req.ok:
+        raise ValueError("Looks like teams url is not right. "
+                         "Can pass directly when instantiating Roady")
+    return url
 
 
-def make_raw_stages_list(tour, year):
+
+def make_raw_stages_list(base_url):
     """
     Get the urls, then scrape each to make jsons of resources
     Also scrapes the front page overview which has info on length,
     type of stage etc.
     """
 
-    base = BASE_URLS[tour].format(year, {}, year)
-
-    urls = get_stage_urls(base)
+    urls = get_stage_urls(base_url)
 
     stages = [scrape_stage(url) for url in urls]
 
@@ -181,17 +204,22 @@ def compose_stages(raw_stages, overview):
         stage['distance'] = overview[i]['distance']
         stage['type'] = overview[i]['type']
 
-        stage = clean_stage(stage)
+        stage['date'] = fix_date(stage['date'])
 
     return stages
 
 
-def clean_stage(stage):
-    """
-    Use this to catch known typos
+def fix_date(dt_str):
+    """ 
+    Fix up any errors found in the site's dates - it happens
     """
 
-    stage['date'] = stage['date'].replace('Saturdag', 'Saturday')
+    if 'dag' in dt_str:
+        dt_str = dt_str.replace('dag', 'day')
 
-    return stage
+    if 'Juli' in dt_str:
+        dt_str = dt_str.replace('Juli', 'July')
+
+    return dt_str
+
 
