@@ -125,7 +125,6 @@ def scrape_stage(url, soup=None, return_soup=False):
         "imap": None,
     }
 
-
     title_text = soup.find('h1').text
     out['from_to'] = title_text.split(':')[1].strip()
     out['description'] = description
