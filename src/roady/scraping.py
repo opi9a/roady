@@ -118,8 +118,8 @@ def scrape_stage(url, soup=None, return_soup=False):
         "stage_no": int(stage_no),
         "from_to": None,
         "description": None,
-        "route": None,
-        "profile": None,
+        "route": None,  # url
+        "profile": None,  # url
         "times": None,
         "climbs": None,
         "imap": None,
@@ -140,6 +140,12 @@ def scrape_stage(url, soup=None, return_soup=False):
             out['route'] = jpg
         if 'profile.jpg' in jpg:
             out['profile'] = jpg
+
+    if out['route'] is None:
+        print("no route jpg for stage", stage_no)
+
+    if out['profile'] is None:
+        print("no profile jpg for stage", stage_no)
 
     # scheduled times
     res = soup.find(attrs={'title': re.compile('scheduled')})

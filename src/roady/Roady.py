@@ -1,5 +1,6 @@
 
 import re
+import requests
 import json
 from pathlib import Path
 from datetime import datetime
@@ -86,7 +87,7 @@ class Roady:
 
         # get raw stages - scrape if not already saved
         self.raw_stages_path = self.tour_dir / 'stages.json'
-        if not self.raw_stages_path.exists():
+        if not self.raw_stages_path.exists() or reload_stages:
             self.raw_stages = make_raw_stages_list(self.base_url)
             with open(self.raw_stages_path, 'w') as fp:
                 json.dump(self.raw_stages, fp, indent=4)
@@ -99,6 +100,13 @@ class Roady:
 
         # pdf location
         self.pdf_fp = self.tour_dir / 'roadbook.pdf'
+
+    def pre_pdf_check(self):
+        """ 
+        Make sure all images etc are present
+        Invite to supply if not
+        """
+        pass
 
     def make_roadbook_pdf(self, pdf_fp=None):
         """
