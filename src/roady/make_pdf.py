@@ -329,7 +329,6 @@ def print_km_to_go(canvas, start_x, scale_w, stage_km, y0, y1,
         k_to_go += minor_unit
         line_x -= decrement
 
-
 def get_image(url, dirpath):
     """
     download the image and return a dict with the path, height, width

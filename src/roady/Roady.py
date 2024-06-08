@@ -8,10 +8,10 @@ from datetime import datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen.canvas import Canvas
 
-from .constants import DATA_DIR, BASE_URLS
+from .constants import DATA_DIR, make_urls
 from .make_pdf import make_pdf, make_front_page, print_teams
-from .scraping import (get_overview, get_teams,
-                       get_stage_urls, scrape_stage)
+from .scraping import (get_stages_overview, get_teams, download_img,
+                       make_stage_urls, scrape_stage)
 
 class Roady:
     """
@@ -27,79 +27,136 @@ class Roady:
     """
 
     def __init__(self, tour, year, data_dir=None,
-                 reload_teams=False, reload_overview=False,
+                 reload_main_urls=False,
+                 reload_route_jpgs=False,
+                 reload_profile_jpgs=False,
+                 reload_teams=False, reload_stages_overview=False,
                  reload_stages=False, teams_url=None, tour_map_url=None):
+        """ 
+        Scraping:
+            High level:
+                overview map (img)
+                teams data (json)
+                stage urls (json)
+            Stages:
+                data (json)
+                route map (img)
+                profile map (img)
+                [gpx ?]
+
+            First get high level, incl stage urls
+            Then stages - folder for each
+                - for each dl: make url and fp, then check if fp exists
+
+        Make roadbook
+        """
 
         self.tour = tour
         self.year = year
-        self.base_url = BASE_URLS[tour].format(year, {}, year)
 
+        # MAKE / CHECK DIRECTORIES
         if data_dir is None:
             self.data_dir = DATA_DIR
         else:
             self.data_dir = Path(data_dir).expanduser()
 
         self.tour_dir = self.data_dir / f'{tour}_{year}'
-        self.imgs_dir = self.tour_dir / 'imgs'
-
         if not self.tour_dir.exists():
             print('creating dir', self.tour_dir)
             self.tour_dir.mkdir()
 
-        if not self.imgs_dir.exists():
-            print('creating dir', self.imgs_dir)
-            self.imgs_dir.mkdir()
+        # MAIN ELEMENTS (ie not stages)
+        # urls and fps - need to check if fps exist,
+        # in which case assume they're already scraped etc
+        # - this allows for editing of the jsons if reqd
+        self.urls_json_fp = self.tour_dir / 'urls.json'
 
-        # get overall route img url
-        if tour_map_url is None:
-            self.tour_map_url = make_tour_map_url(self.tour, self.year)
+        if not self.urls_json_fp.exists() or reload_main_urls:
+            print('making main urls json and saving')
+            self.urls = make_urls(tour, year)
+            with open(self.urls_json_fp, 'w') as fp:
+                json.dump(self.urls, fp, indent=4)
+
         else:
-            self.tour_map_url = tour_map_url
+            print('loading urls json from', self.urls_json_fp)
+            with open(self.urls_json_fp, 'r') as fp:
+                self.urls = json.load(fp)
 
-        # scrape teams
-        teams_json = self.tour_dir / 'teams.json'
-        self.teams_url = None
+        # overview map img
+        self.route_fp = self.tour_dir / 'route.jpg'
+        if not self.route_fp.exists():
+            download_img(self.urls['route'], self.route_fp)
 
-        if teams_json.exists() and not reload_teams:
-            with open(teams_json, 'r') as fp:
+        # teams data json
+        self.teams_json_fp = self.tour_dir / 'teams.json'
+
+        if self.teams_json_fp.exists() and not reload_teams:
+            with open(self.teams_json_fp, 'r') as fp:
                 self.teams = json.load(fp)
         else:
-            # nb this may not make right url - format different each year
-            if teams_url is None:
-                self.teams_url = make_teams_url(self.tour, self.year)
-            else:
-                self.teams_url = teams_url
-            self.teams = get_teams(self.teams_url)
+            self.teams = get_teams(self.urls['riders'])
 
-            with open(teams_json, 'w') as fp:
-                print('saving teams to', teams_json)
+            with open(self.teams_json_fp, 'w') as fp:
+                print('saving teams to', self.teams_json_fp)
                 json.dump(self.teams, fp, indent=4)
 
-        # get overview - scrape if not already saved
-        self.overview_path = self.tour_dir / 'stages_overview.json'
-        if not self.overview_path.exists() or reload_overview:
-            self.overview = get_overview(self.tour, self.year)
-            with open(self.overview_path, 'w') as fp:
-                json.dump(self.overview, fp, indent=4)
+        # STAGES
+        # scrape the stages overview - scrape if not already saved
+        # this comes from the front page. a bit redundant but only
+        # place to get the 'type' of the stage (and something else?)
+        # - it forms a component of the final stage info (with raw stage)
+        self.stages_overview_path = self.tour_dir / 'stages_overview.json'
+        if not self.stages_overview_path.exists() or reload_stages_overview:
+            self.stages_overview = get_stages_overview(self.urls['main'])
+            with open(self.stages_overview_path, 'w') as fp:
+                json.dump(self.stages_overview, fp, indent=4)
         else:
-            with open(self.overview_path, 'r') as fp:
-                self.overview = json.load(fp)
+            with open(self.stages_overview_path, 'r') as fp:
+                self.stages_overview = json.load(fp)
 
-        # get raw stages - scrape if not already saved
-        self.raw_stages_path = self.tour_dir / 'stages.json'
-        if not self.raw_stages_path.exists() or reload_stages:
-            self.raw_stages = make_raw_stages_list(self.base_url)
-            with open(self.raw_stages_path, 'w') as fp:
-                json.dump(self.raw_stages, fp, indent=4)
-        else:
-            with open(self.raw_stages_path, 'r') as fp:
-                self.raw_stages = json.load(fp)
+        # scrape stage data if not already saved
+        # then compose to make final stage and dl imgs
+        self.stages = []
+        for i, overview in enumerate(self.stages_overview):
+            stage_no = i + 1
+            print('stage', overview)
+            stage_dir = self.tour_dir / 'stages' / f'stage_{i+1}'
 
-        # make the composed stages
-        self.stages = compose_stages(self.raw_stages, self.overview)
+            if not stage_dir.exists():
+                stage_dir.mkdir(parents=True)
+
+            data_fp = stage_dir / 'data.json'
+            if not data_fp.exists() or reload_stages:
+                url = self.urls['stage_bases']['main'].format(stage_no)
+                data = scrape_stage(url)
+                for k,v in self.urls['stage_bases'].items():
+                    data[k] = v.format(stage_no)
+                with open(data_fp, 'w') as fp:
+                    json.dump(data, fp, indent=4)
+            else:
+                with open(data_fp, 'r') as fp:
+                    data = json.load(fp)
+
+            stage = compose_stage(data, overview)
+            self.stages.append(stage)
+
+            route_jpg_fp = stage_dir / 'route.jpg'
+            if not route_jpg_fp.exists() or reload_route_jpgs:
+                download_img(stage['route'], route_jpg_fp)
+
+            profile_jpg_fp = stage_dir / 'profile.jpg'
+            if not profile_jpg_fp.exists() or reload_profile_jpgs:
+                download_img(stage['profile'], profile_jpg_fp)
 
         # pdf location
         self.pdf_fp = self.tour_dir / 'roadbook.pdf'
+
+    def __get_value__(self, name):
+        """ 
+        Make the thing a dict for eg 'urls'
+        """
+        return self.__dict__[name]
+
 
     def pre_pdf_check(self):
         """ 
@@ -161,35 +218,35 @@ def make_tour_map_url(tour, year, imgs_dir=None):
     return url
 
 
-def make_teams_url(tour, year):
-    """
-    Return the url
-    """
-
-    base = BASE_URLS[tour].format(year, year, year)
-
-    url = base.replace(f"-route/stage-{year}-", "/riders-")
-
-    req = requests.get(url)
-
-    if not req.ok:
-        raise ValueError("Looks like teams url is not right. "
-                         "Can pass directly when instantiating Roady")
-    return url
-
-
-def make_raw_stages_list(base_url):
+def make_raw_stages_list(base_stage_url):
     """
     Get the urls, then scrape each to make jsons of resources
     Also scrapes the front page overview which has info on length,
     type of stage etc.
     """
 
-    urls = get_stage_urls(base_url)
+    urls = make_stage_urls(base_stage_url)
 
     stages = [scrape_stage(url) for url in urls]
 
     return stages
+
+
+def compose_stage(raw_stage, overview):
+    """
+    Add the overview data to the raw_stage
+    """
+
+    stage = raw_stage.copy()
+
+    stage['date2'] = overview['date']
+    stage['title2'] = overview['title']
+    stage['distance'] = overview['distance']
+    stage['type'] = overview['type']
+
+    stage['date'] = fix_date(stage['date'])
+
+    return stage
 
 
 def compose_stages(raw_stages, overview):

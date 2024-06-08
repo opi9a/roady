@@ -6,18 +6,21 @@ Scripts to scrape:
 import requests
 from bs4 import BeautifulSoup
 import re
+import shutil
 
 from .constants import BASE_URLS, ROOT
 
 
-def get_overview(tour, year, soup=None):
+def get_stages_overview(url, soup=None):
     """
-    The list of stages
+    The list of stages, with date, title, distance, type
+    (arguably redundant but only place to get 'type')
     """
 
-    long_url = BASE_URLS[tour].format(year, 'x', 'x')
+    # long_url = BASE_URLS[tour].format(year, 'x', 'x')
 
-    url = long_url.split('/stage-x')[0]
+    # url = long_url.split('/stage-x')[0]
+    # return url
 
     req = requests.get(url)
 
@@ -29,7 +32,7 @@ def get_overview(tour, year, soup=None):
     stage = 1
     i = 0
     while i < len(tds):
-        print('looking for stage', stage)
+        print('looking for stage', stage, 'overview')
         print('line', i)
         td = tds[i]
         cl = td.get('class', [None])[0]
@@ -79,7 +82,7 @@ def get_teams(url=None, soup=None, just_return_soup=False):
     return teams
 
 
-def get_stage_urls(base_url, start=1, end=21):
+def make_stage_urls(base_url, start=1, end=21):
     """
     Return the main urls
     """
@@ -98,7 +101,6 @@ def scrape_stage(url, soup=None, return_soup=False):
     """
     Just get urls of resources?
     """
-
 
     stage_no = re.search('stage-(\d*)-', url).groups()[0]
     print('in stage', stage_no)
@@ -130,22 +132,23 @@ def scrape_stage(url, soup=None, return_soup=False):
     out['description'] = description
 
     # all useful jpegs urls
-    jpgs = [
-        x['content']
-        for x in soup.find_all(attrs={'content': re.compile('cdn.*stage')})
-    ]
+    # OBSOLETE as seems can infer with greater success
+    # jpgs = [
+    #     x['content']
+    #     for x in soup.find_all(attrs={'content': re.compile('cdn.*stage')})
+    # ]
 
-    for jpg in jpgs:
-        if 'route.jpg' in jpg:
-            out['route'] = jpg
-        if 'profile.jpg' in jpg:
-            out['profile'] = jpg
+    # for jpg in jpgs:
+    #     if 'route.jpg' in jpg:
+    #         out['route'] = jpg
+    #     if 'profile.jpg' in jpg:
+    #         out['profile'] = jpg
 
-    if out['route'] is None:
-        print("no route jpg for stage", stage_no)
+    # if out['route'] is None:
+    #     print("no route jpg for stage", stage_no)
 
-    if out['profile'] is None:
-        print("no profile jpg for stage", stage_no)
+    # if out['profile'] is None:
+    #     print("no profile jpg for stage", stage_no)
 
     # scheduled times
     res = soup.find(attrs={'title': re.compile('scheduled')})
@@ -185,5 +188,20 @@ def get_description(soup):
     desc = out[(len(date) + 2):].strip()
 
     return date, desc
+
+
+def download_img(url, img_fp):
+    """ 
+    Download an img from the requested url and save to fp
+    """
+    req = requests.get(url, stream=True)
+    print('img downloading', url, end="..")
+    
+    with open(img_fp, 'wb') as fp:
+        shutil.copyfileobj(req.raw, fp)
+
+    print('OK')
+
+    del req
 
 
