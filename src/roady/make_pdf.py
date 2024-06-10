@@ -29,8 +29,7 @@ class Rect:
         self.width = width
 
 
-def make_front_page(stages, img_url, canvas, imgs_dir=None,
-                    tour=None, year=None):
+def make_front_page(stages, img_fp, canvas, tour=None, year=None):
     """
     List of stages and map
     """
@@ -54,7 +53,7 @@ def make_front_page(stages, img_url, canvas, imgs_dir=None,
 
 
     # route map
-    i_dict = get_image(img_url, imgs_dir)
+    i_dict = get_image_dict(img_fp)
 
     h, w = scale_image(i_dict['height'], i_dict['width'],
                        width, route_h)
@@ -129,14 +128,14 @@ def make_front_page(stages, img_url, canvas, imgs_dir=None,
             continue
 
         for col, x in col_xs.items():
-            canvas.drawString(x * cm, y * cm, text=stage[col])
+            canvas.drawString(x * cm, y * cm, text=stage[col] or 'not found')
 
         i += 1
 
     canvas.showPage()
 
 
-def make_pdf(stage_dict, canvas=None, outpath=None, imgs_dir=None,
+def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None, 
              km_to_go=False, l_kms_marg=0, r_kms_marg=0, 
              start_finish_km_only=False):
     """
@@ -168,8 +167,8 @@ def make_pdf(stage_dict, canvas=None, outpath=None, imgs_dir=None,
 
     i_dict = {}
 
-    i_dict['route'] = get_image(stage_dict['route'], imgs_dir)
-    i_dict['profile'] = get_image(stage_dict['profile'], imgs_dir)
+    i_dict['route'] = get_image_dict(stage_dirpath / 'route.jpg')
+    i_dict['profile'] = get_image_dict(stage_dirpath / 'profile.jpg')
     print(f"h: {i_dict['profile']['height']}, "
           f"w: {i_dict['profile']['height']}", end=" - ")
 
@@ -329,32 +328,6 @@ def print_km_to_go(canvas, start_x, scale_w, stage_km, y0, y1,
         k_to_go += minor_unit
         line_x -= decrement
 
-def get_image(url, dirpath):
-    """
-    download the image and return a dict with the path, height, width
-    """
-
-    img_path = Path(dirpath) / Path(url).name
-
-    if not img_path.exists():
-        req = requests.get(url, stream=True)
-        print('downloading', url, end="..")
-        
-        with open(img_path, 'wb') as fp:
-            shutil.copyfileobj(req.raw, fp)
-
-        print('OK')
-
-        del req
-
-    image = Image.open(img_path)
-
-    return {
-        'path': img_path,
-        'height': image.height,
-        'width': image.width,
-    }
-
 
 def scale_image(i_h, i_w, max_h, max_w):
     """
@@ -423,6 +396,7 @@ def print_team(team, riders,
     canvas.setFont("Helvetica-Bold", 8)
     canvas.drawString(x, y, team)
 
+    
     i = 1
     for num, rider in riders.items():
         new_y = y - (lh * i)
@@ -446,4 +420,19 @@ def calc_x_nudge(k_to_go):
         return nudge_by_dig[1]
 
     return nudge_by_dig[2]
+
+
+def get_image_dict(img_path):
+    """
+    return a dict with the path, height, width
+    """
+
+    image = Image.open(img_path)
+
+    return {
+        'path': img_path,
+        'height': image.height,
+        'width': image.width,
+    }
+
 

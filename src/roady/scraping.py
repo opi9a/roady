@@ -8,23 +8,17 @@ from bs4 import BeautifulSoup
 import re
 import shutil
 
-from .constants import BASE_URLS, ROOT
+from .constants import ROOT
 
 
-def get_stages_overview(url, soup=None):
+def get_stages_overview(url=None, soup=None):
     """
     The list of stages, with date, title, distance, type
-    (arguably redundant but only place to get 'type')
     """
 
-    # long_url = BASE_URLS[tour].format(year, 'x', 'x')
-
-    # url = long_url.split('/stage-x')[0]
-    # return url
-
-    req = requests.get(url)
-
-    soup = BeautifulSoup(req.text, 'html.parser')
+    if soup is None:
+        req = requests.get(url)
+        soup = BeautifulSoup(req.text, 'html.parser')
 
     tds = soup.find_all('td')
 
@@ -32,8 +26,6 @@ def get_stages_overview(url, soup=None):
     stage = 1
     i = 0
     while i < len(tds):
-        print('looking for stage', stage, 'overview')
-        print('line', i)
         td = tds[i]
         cl = td.get('class', [None])[0]
 
@@ -81,25 +73,44 @@ def get_teams(url=None, soup=None, just_return_soup=False):
 
     return teams
 
-
-def make_stage_urls(base_url, start=1, end=21):
+def xget_teams(url=None, soup=None, just_return_soup=False):
     """
-    Return the main urls
+    Return a dict of riders with numbers by team
     """
 
-    print('\nGetting stage urls for', base_url)
-    out = []
-    for stage in range(start, end+1):
-        url = base_url.format(stage)
-        print(url)
-        out.append(url)
+    if soup is None:
+        req = requests.get(url)
+        soup = BeautifulSoup(req.text, 'html.parser')
 
-    return out
+        if just_return_soup:
+            return soup
+
+    # this makes a list of block elements, one per team
+    itals = soup.find_all('i')
+
+    teams = {}
+    for ital in itals:
+        team = ital.text
+        # teams[team] = {}
+
+        riders_str = ital.next_sibling.next_sibling
+        # riders = [x.strip() for x in riders_str.split(",")]
+        riders = {
+            str(i+1): x.strip()
+            for i,x in enumerate(riders_str.split(","))
+        } 
+        # numbers = re.split"\D*\s", riders_str[1:-1]
+
+        # teams[team] = dict(zip(numbers, riders))
+        teams[team] = riders
+
+    return teams
 
 
 def scrape_stage(url, soup=None, return_soup=False):
     """
-    Just get urls of resources?
+    Gets available info from the stage url.
+    (Much of this not used yet)
     """
 
     stage_no = re.search('stage-(\d*)-', url).groups()[0]
@@ -107,6 +118,10 @@ def scrape_stage(url, soup=None, return_soup=False):
 
     if soup is None:
         req = requests.get(url)
+
+        if not req.ok:
+            return None
+
         soup = BeautifulSoup(req.text, features='html.parser')
         
         if return_soup:
@@ -120,8 +135,6 @@ def scrape_stage(url, soup=None, return_soup=False):
         "stage_no": int(stage_no),
         "from_to": None,
         "description": None,
-        "route": None,  # url
-        "profile": None,  # url
         "times": None,
         "climbs": None,
         "imap": None,
@@ -130,25 +143,6 @@ def scrape_stage(url, soup=None, return_soup=False):
     title_text = soup.find('h1').text
     out['from_to'] = title_text.split(':')[1].strip()
     out['description'] = description
-
-    # all useful jpegs urls
-    # OBSOLETE as seems can infer with greater success
-    # jpgs = [
-    #     x['content']
-    #     for x in soup.find_all(attrs={'content': re.compile('cdn.*stage')})
-    # ]
-
-    # for jpg in jpgs:
-    #     if 'route.jpg' in jpg:
-    #         out['route'] = jpg
-    #     if 'profile.jpg' in jpg:
-    #         out['profile'] = jpg
-
-    # if out['route'] is None:
-    #     print("no route jpg for stage", stage_no)
-
-    # if out['profile'] is None:
-    #     print("no profile jpg for stage", stage_no)
 
     # scheduled times
     res = soup.find(attrs={'title': re.compile('scheduled')})
