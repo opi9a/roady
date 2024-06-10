@@ -114,7 +114,6 @@ def scrape_stage(url, soup=None, return_soup=False):
     """
 
     stage_no = re.search('stage-(\d*)-', url).groups()[0]
-    print('in stage', stage_no)
 
     if soup is None:
         req = requests.get(url)

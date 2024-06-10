@@ -131,6 +131,7 @@ class Roady:
         stage_no = 0
 
         while True:
+            # if have stages_overview then don't need to infer whether done yet
             if self.stages_overview and stage_no == len(self.stages_overview):
                 print('Already got', len(self.stages), 'stages, so stopping')
                 break
@@ -150,6 +151,7 @@ class Roady:
                 url = self.urls['stage_bases']['main'].format(stage_no)
                 data = scrape_stage(url)
 
+                # this is where infer if finished, if don't have overview
                 if data is None:
                     print('looks like the last stage, no data from', url)
                     stage_dir.unlink()
