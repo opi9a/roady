@@ -346,10 +346,18 @@ def scale_image(i_h, i_w, max_h, max_w):
     return  out
 
 
-def print_teams(teams, canvas, cols=4):
+def print_teams(teams, canvas=None, fp_out=None, cols=4):
     """
     Teams with riders by number on single page
     """
+
+    # make a canvas to print out independently if one isn't passed
+    if canvas is None:
+        stand_alone = True
+        canvas = Canvas(Path(fp_out).as_posix(), pagesize=A4, bottomup=True)
+    else:
+        stand_alone = False
+
     top = 28
     bottom = 2
     left = 2
@@ -377,6 +385,9 @@ def print_teams(teams, canvas, cols=4):
         i += 1
 
     canvas.showPage()
+
+    if stand_alone:
+        canvas.save()
 
 
 def print_team(team, riders,

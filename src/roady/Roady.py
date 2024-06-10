@@ -71,6 +71,7 @@ class Roady:
             'stages_overview': self.tour_dir / 'stages_overview',
             'stages_dir': self.tour_dir / 'stages/',
             'roadbook': self.tour_dir / 'roadbook.pdf',
+            'teams_pdf': self.tour_dir / 'teams.pdf',
         }
 
         # make the URLS we are going to need, if not already there
@@ -208,7 +209,7 @@ class Roady:
         make_front_page(self.stages, self.fps['route'],
                         canvas, tour=self.tour, year=self.year) 
 
-        # print teams
+        # print teams (NB can be done independently)
         print_teams(self.teams, canvas=canvas)
 
         # iterate over stages
@@ -220,6 +221,16 @@ class Roady:
         print()
 
         canvas.save()
+
+
+    def make_teams_pdf(self, pdf_fp=None):
+        """ 
+        Can be handy to have an indepenent pdf of the teams
+        """
+        if pdf_fp is None:
+            pdf_fp = self.fps['teams_pdf']
+
+        print_teams(teams=self.teams, fp_out=pdf_fp)
 
 
 def compose_stage(raw_stage, overview):
