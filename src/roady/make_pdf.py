@@ -13,39 +13,33 @@ from reportlab.lib.units import cm
 from PIL import Image
 from PIL.ExifTags import TAGS
 
-class Rect:
-    """
-    Use this to hold coords for rectantles on the page,
-    eg profile, route
-    """
-    def __init__(self, bottom=None, top=None, height=None,
-                 left=None, right=None, width=None):
-
-        self.bottom = bottom
-        self.top = top
-        self.height = height
-        self.left = left
-        self.right = right
-        self.width = width
+from .draw_img import draw_rect_img
 
 
-def make_front_page(stages, img_fp, canvas, tour=None, year=None):
+def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=None):
     """
     List of stages and map
     """
     top = 29
     bottom = 2
-    left = 2
-    right = 21
+    left = 1
+    right = 20
     width = right - left
 
     title_h = 1.5
     route_h = 17
 
+    # make a canvas to print out independently if one isn't passed
+    if canvas is None and fp_out is not None:
+        stand_alone = True
+        canvas = Canvas(Path(fp_out).as_posix(), pagesize=A4, bottomup=True)
+    else:
+        stand_alone = False
+
     # title - have to infer tour and year
     if tour is None and year is None:
-        tour, year = re.search("images/(\S*)/(\d*)/route.jpg", img_url).groups()
-        tour = tour.title().replace('-', ' ').replace("De", "de")
+        tour, year = re.search(
+            "roadbooks/(\S*)_(\d*)/route.jpg", str(img_fp)).groups()
 
     canvas.setFont("Helvetica-Bold", 20)
     canvas.drawString((left + 5) * cm, (top - title_h) * cm,
@@ -53,19 +47,13 @@ def make_front_page(stages, img_fp, canvas, tour=None, year=None):
 
 
     # route map
-    i_dict = get_image_dict(img_fp)
-
-    h, w = scale_image(i_dict['height'], i_dict['width'],
-                       width, route_h)
-
-
-    canvas.drawInlineImage(
-        i_dict['path'].as_posix(),
-        x = left + ((width - w)/2) * cm,
-        y = (top - h - title_h - 1) * cm,
-        height = h * cm,
-        width = w * cm,
+    route_dims = draw_rect_img(
+        img_fp=img_fp,
+        canvas=canvas,
+        top=(top - title_h - 0.5), height=14,
+        right=right, left=left,
     )
+
 
     new_stages = []
 
@@ -134,6 +122,9 @@ def make_front_page(stages, img_fp, canvas, tour=None, year=None):
 
     canvas.showPage()
 
+    if stand_alone:
+        canvas.save()
+
 
 def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None, 
              km_to_go=False, l_kms_marg=0, r_kms_marg=0, 
@@ -143,7 +134,7 @@ def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None,
     Pass a canvas or an outpath
     l_kms_marg and r_kms_marg for aligning the kms to go with start and
     end within profile img
-    start_finish_km_only just shows those, for aligning
+    start_finish_km_only just shows those, for aligning / debug
     """
 
     file_output = False
@@ -161,55 +152,17 @@ def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None,
     right = 18
     top_margin = 1
 
+    # TITLE
     canvas.setFont("Helvetica-Bold", 20)
     title = (f"Stage {stage_dict['stage_no']} - {stage_dict['date']}")
     canvas.drawString((left + 4.5)*cm, top*cm, title)
 
-    i_dict = {}
-
-    i_dict['route'] = get_image_dict(stage_dirpath / 'route.jpg')
-    i_dict['profile'] = get_image_dict(stage_dirpath / 'profile.jpg')
-    print(f"h: {i_dict['profile']['height']}, "
-          f"w: {i_dict['profile']['height']}", end=" - ")
-
-    h, w = scale_image(
-        i_dict['route']['height'],
-        i_dict['route']['width'],
-        max_h = 14,
-        max_w = right - left,
-    )
-    scale_factor = h / i_dict['route']['height']
-    scale_factor_w = w / i_dict['route']['width']
-    print(f"scaled by {scale_factor:.4f}")
-
-    i_dict['route']['plot_height'] = h
-    i_dict['route']['plot_width'] = w
-
-    h, w = scale_image(
-        i_dict['profile']['height'],
-        i_dict['profile']['width'],
-        max_h = 15,
-        max_w = right - left,
-    )
-
-    i_dict['profile']['plot_height'] = h
-    i_dict['profile']['plot_width'] = w
-
-
-    # the profile first, at top
-    profile = Rect(
-        bottom = top - (top_margin + i_dict['profile']['plot_height']),
-        height = i_dict['profile']['plot_height'],
-        width = i_dict['profile']['plot_width'],
-        top = top - top_margin,
-    )
-
-    canvas.drawInlineImage(
-        i_dict['profile']['path'].as_posix(),
-        x = left*cm,
-        y = profile.bottom * cm,
-        height =  profile.height * cm,
-        width = profile.width* cm,
+    # PROFILE
+    prof_dims = draw_rect_img(
+        img_fp=stage_dirpath / 'profile.jpg',
+        canvas=canvas,
+        top = top - top_margin, height=12,
+        right=right, left=left,
     )
 
 
@@ -219,7 +172,7 @@ def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None,
     # get the stage distance, d, and the width of the image
     # draw a vertical line each 10km from end
     scale_l = left + l_kms_marg
-    scale_r = scale_l + i_dict['profile']['plot_width'] - r_kms_marg
+    scale_r = scale_l + prof_dims['width'] - r_kms_marg
     scale_w = scale_r - scale_l
 
     # draw the scale
@@ -228,42 +181,36 @@ def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None,
             canvas=canvas,
             start_x=scale_r, scale_w=scale_w,
             stage_km=stage_dict['distance'],
-            y0=profile.bottom,
-            y1=profile.top,
+            y0=prof_dims['bottom'],
+            y1=prof_dims['top'],
             minor_unit=1,
         )
+    
+    # debug only
     elif start_finish_km_only:
         canvas.setStrokeColor("red")
         canvas.line(
             scale_l * cm,  # x1
-            profile.bottom * cm,  # y1
+            prof_dims['bottom'] * cm,
             scale_l * cm,  # x2
-            profile.top * cm  # y2
+            prof_dims['top'] * cm,
         )
         canvas.line(
             scale_r * cm,  # x1
-            profile.bottom * cm,  # y1
+            prof_dims['bottom'] * cm,
             scale_r * cm,  # x2
-            profile.top * cm  # y2
+            prof_dims['top'] * cm,
         )
 
     canvas.setFillAlpha(1)
 
-    # the route
-    if 'route' in stage_dict.keys():
-        y = top - (
-                2 # allowance for title
-                + i_dict['profile']['plot_height']
-                + 0 # gap
-                + i_dict['route']['plot_height']
-            )
-        canvas.drawInlineImage(
-            i_dict['route']['path'].as_posix(),
-            x = left*cm,
-            y = y*cm,
-            height = i_dict['route']['plot_height'] * cm,
-            width = i_dict['route']['plot_width'] * cm,
-        )
+    # ROUTE
+    route_dims = draw_rect_img(
+        img_fp=stage_dirpath / 'route.jpg',
+        canvas=canvas,
+        bottom=bottom, height=14,
+        right=right, left=left,
+    )
 
     # ends the page
     canvas.showPage()
@@ -271,7 +218,61 @@ def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None,
     if file_output:
         canvas.save()
 
-    return i_dict
+
+
+def add_extras(extra_jpgs, stage_dirpath, canvas=None, fp_out=None):
+    """ 
+    Make an additional page
+    if 1 or 2 imgs, do 1 per half
+    if 3 split page to 3
+    if 4 do 2 pages
+    """
+    # make a canvas to print out independently if one isn't passed
+    if canvas is None:
+        stand_alone = True
+        canvas = Canvas(Path(fp_out).as_posix(), pagesize=A4, bottomup=True)
+    else:
+        stand_alone = False
+
+
+    top = 27
+    bottom = 3
+    left = 2
+    right = 18
+    top_margin = 1
+
+    title_h = 1
+    max_h = 11
+    margin = 0.5
+
+    img_h = min(max_h,
+                ((top - bottom) / len(extra_jpgs)) - (margin*len(extra_jpgs)))
+
+    last = top
+
+    for jpg in extra_jpgs:
+        # print a title
+        title = jpg.split('/')[-1]
+        canvas.setFont("Helvetica-Bold", 14)
+        canvas.drawString((left + 4.5)*cm, last*cm, title)
+
+        last -= title_h
+
+        # now the img
+        dims = draw_rect_img(
+            img_fp=stage_dirpath / title,
+            canvas=canvas,
+            bottom=last - img_h, top=last,
+            right=right, left=left,
+        )
+
+        last -= (dims['height'] + margin)
+
+    canvas.showPage()
+
+    if stand_alone:
+        canvas.save()
+
 
 
 def print_km_to_go(canvas, start_x, scale_w, stage_km, y0, y1,
@@ -327,23 +328,6 @@ def print_km_to_go(canvas, start_x, scale_w, stage_km, y0, y1,
 
         k_to_go += minor_unit
         line_x -= decrement
-
-
-def scale_image(i_h, i_w, max_h, max_w):
-    """
-    For passed image height and width, and max values,
-    return the height and width to print
-    """
-
-    # image too tall, scale to max height
-    if i_h / i_w > max_h / max_w:
-        out = max_h, i_w * (max_h / i_h)
-
-    # too wide, scale to max width
-    else:
-        out = i_h * (max_w / i_w), max_w
-
-    return  out
 
 
 def print_teams(teams, canvas=None, fp_out=None, cols=4):
@@ -431,19 +415,5 @@ def calc_x_nudge(k_to_go):
         return nudge_by_dig[1]
 
     return nudge_by_dig[2]
-
-
-def get_image_dict(img_path):
-    """
-    return a dict with the path, height, width
-    """
-
-    image = Image.open(img_path)
-
-    return {
-        'path': img_path,
-        'height': image.height,
-        'width': image.width,
-    }
 
 

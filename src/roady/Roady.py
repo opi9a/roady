@@ -9,7 +9,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen.canvas import Canvas
 
 from .constants import DATA_DIR, make_urls
-from .make_pdf import make_pdf, make_front_page, print_teams
+from .make_pdf import make_pdf, make_front_page, print_teams, add_extras
 from .scraping import (get_stages_overview, get_teams, xget_teams,
                        download_img, scrape_stage)
 
@@ -183,6 +183,16 @@ class Roady:
             if not profile_jpg_fp.exists() or reload_profile_jpgs:
                 download_img(stage['profile'], profile_jpg_fp)
 
+            # get any extras that are available
+            if stage['extra_jpgs']:
+                for j in stage['extra_jpgs']:
+                    title = j.split('/')[-1]
+                    fp = stage_dir / title
+                    if not fp.exists():
+                        download_img(j, fp)
+                    else:
+                        print('already have extra jpg', title)
+
 
     def __get_value__(self, name):
         """ 
@@ -191,9 +201,12 @@ class Roady:
         return self.__dict__[name]
 
 
-    def make_roadbook_pdf(self, pdf_fp=None):
+    def make_roadbook_pdf(self, pdf_fp=None, extra_jpgs=True,
+                          double_sided=True, max_teams=True):
         """
-        Write it out
+        Write it out.  Optionally print the extra jpgs (climbs)
+        and enable nice layout for double sided by inserting blank pages
+        By default fills any blanks with teams
         """
         if pdf_fp is None:
             pdf_fp = self.fps['roadbook']
@@ -205,20 +218,41 @@ class Roady:
 
         canvas = Canvas(pdf_fp.as_posix(), pagesize=A4, bottomup=True)
 
-        # do the front page(s)
-        make_front_page(self.stages, self.fps['route'],
-                        canvas, tour=self.tour, year=self.year) 
+        plan = make_page_order(self.stages,
+                               double_sided=double_sided, max_teams=max_teams)
 
-        # print teams (NB can be done independently)
-        print_teams(self.teams, canvas=canvas)
+        for i, page in enumerate(plan):
 
-        # iterate over stages
-        print('stage', end=" ")
-        for i, stage in enumerate(self.stages):
-            stage_dir = self.tour_dir / 'stages' / f"stage_{i+1}"
-            make_pdf(stage, stage_dirpath=stage_dir, canvas=canvas)
-            print(i+1, end=" ", flush=True)
-        print()
+            print(f"page {i:>2}: {page}", end=" ")
+
+            if page == 'title':
+                # do the front page(s)
+                make_front_page(self.stages, self.fps['route'],
+                                canvas, tour=self.tour, year=self.year) 
+                print("made front")
+
+            elif page=='blank':
+                canvas.showPage()
+                print("made blank")
+                pass
+
+            elif page == 'teams':
+                print_teams(self.teams, canvas=canvas)
+                print("made teams")
+
+            else:
+                stage_str, kind = page.split()
+                stage = self.stages[int(stage_str) - 1]
+                stage_dir = self.tour_dir / 'stages' / f"stage_{stage['stage_no']}"
+
+                if kind == 'main':
+                    make_pdf(stage, stage_dirpath=stage_dir, canvas=canvas,
+                             km_to_go=True)
+                    print("made main for stage", stage['stage_no'])
+
+                elif kind == 'extra':
+                    add_extras(stage['extra_jpgs'], stage_dir, canvas=canvas)
+                    print("made extras for stage", stage['stage_no'])
 
         canvas.save()
 
@@ -267,3 +301,63 @@ def fix_date(dt_str):
     return dt_str
 
 
+def make_page_order(stages, double_sided=True, repeat_teams=True, max_teams=False):
+    """ 
+    Return a list with the printing plan
+    """
+
+    if repeat_teams:
+        out = ['title', 'teams']
+    else:
+        out = ['title', 'blank']
+
+    for st in stages:
+        # this is the problem - when a stage with extra jpgs appears
+        # on an odd page - which means its extras page would be overleaf
+        # -> solution is to insert a page before, but you don't want that to 
+        # mean the previous double spread has a stage only on the left.
+        # So you have to go back to before that one.
+        # NB no problem with interference between consecutive extra jpg stages,
+        # because doing this ensures you are set up correctly for the next stage,
+        # with main stage on left of double (next page) and extras facing
+        if st['extra_jpgs'] and len(out) % 2 == 0:
+            # print(f'stage{st["stage_no"]} has extras and out is {len(out)} so inserting blank')
+            out.insert(-1, 'blank')
+            # print_plan(out)
+        out.append(f"{st['stage_no']} main")
+        # print_plan(out)
+        if st['extra_jpgs']:
+            out.append(f"{st['stage_no']} extra")
+            # print_plan(out)
+
+    if len(out) % 2 == 0:
+        out.append('blank')
+
+    out.append('teams')
+
+    if not double_sided:
+        return [x for x in out if x != 'blank']
+
+    if max_teams:
+        return ['teams' if x == 'blank' else x for x in out ]
+
+    return out
+
+
+def print_plan(plan):
+    """ 
+    Debugery
+    """
+
+    for i, p in enumerate(plan):
+        if " " in p:
+            no, kind = p.split()
+            print(f"{no}{kind[0]}", end="")
+        else:
+            print(p[0], end="")
+        if i % 2 == 0:
+            print('|', end="")
+        else:
+            print('.', end="")
+
+    print()

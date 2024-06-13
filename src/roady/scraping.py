@@ -137,6 +137,7 @@ def scrape_stage(url, soup=None, return_soup=False):
         "times": None,
         "climbs": None,
         "imap": None,
+        "extra_jpgs": None,
     }
 
     title_text = soup.find('h1').text
@@ -166,6 +167,17 @@ def scrape_stage(url, soup=None, return_soup=False):
         out['imap'] = ROOT + res['data-cb']
     else:
         out['imap'] = None
+
+    # get all poss useful jpgs
+    # replace '-100' which makes it a thumbnail I think
+    # this will prob include route.jpg, profile.jpg which are sorted elsewhere
+    jpgs = [x['src'].replace('-100', '') for x in soup.find_all('img')
+            if "jpg" in x['src']
+            and f"stage-" in x['src']]
+
+        
+    out['extra_jpgs'] = [j for j in jpgs if not
+                   (j.endswith('-profile.jpg') or j.endswith('-route.jpg'))]
 
     return out
 
