@@ -175,16 +175,20 @@ def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None,
     scale_r = scale_l + prof_dims['width'] - r_kms_marg
     scale_w = scale_r - scale_l
 
-    # draw the scale
-    if km_to_go and not stage_dict['distance'].isnumeric():
-        print('cannot interpret the km for this stage, so no km_to_go')
-        km_to_go = False
+    # if drawing the scale, check distance is available
+    if km_to_go:
+        try:
+            distance = float(stage_dict['distance'])
+        except:
+            km_to_go = False
+            distance = None
 
+    # draw the scale
     if km_to_go and not start_finish_km_only:
         print_km_to_go(
             canvas=canvas,
             start_x=scale_r, scale_w=scale_w,
-            stage_km=stage_dict['distance'],
+            stage_km=distance,
             y0=prof_dims['bottom'],
             y1=prof_dims['top'],
             minor_unit=1,

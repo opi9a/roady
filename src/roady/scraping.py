@@ -134,6 +134,7 @@ def scrape_stage(url, soup=None, return_soup=False):
         "stage_no": int(stage_no),
         "from_to": None,
         "description": None,
+        "parsed_distance": None,
         "times": None,
         "climbs": None,
         "imap": None,
@@ -143,6 +144,7 @@ def scrape_stage(url, soup=None, return_soup=False):
     title_text = soup.find('h1').text
     out['from_to'] = title_text.split(':')[1].strip()
     out['description'] = description
+    out['parsed_distance'] = infer_km(description)
 
     # scheduled times
     res = soup.find(attrs={'title': re.compile('scheduled')})
@@ -209,4 +211,21 @@ def download_img(url, img_fp):
 
     del req
 
+
+def infer_km(description):
+    """ 
+    Its in there as eg "153.2 kilometres to go"
+    """
+
+    match = re.search(re.compile(r"\d{1,3}\.?\d*\s*kilomet"),
+                      description)
+
+    if match:
+        res = match.group()
+        out = res.split(' ')[0]
+
+        if out.replace('.', '').isnumeric():
+            return float(out)
+
+    print('cannot infer km')
 

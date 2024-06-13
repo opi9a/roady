@@ -155,7 +155,7 @@ class Roady:
                 # this is where infer if finished, if don't have overview
                 if data is None:
                     print('looks like the last stage, no data from', url)
-                    stage_dir.unlink()
+                    stage_dir.rmdir()
                     break
                 for k,v in self.urls['stage_bases'].items():
                     data[k] = v.format(stage_no)
@@ -279,7 +279,13 @@ def compose_stage(raw_stage, overview):
 
     stage['date2'] = overview.get('date')
     stage['title2'] = overview.get('title')
-    stage['distance'] = overview.get('distance')
+    distance = overview.get('distance')
+
+    if distance is None or not distance.replace('.', '').isnumeric():
+        stage['distance'] = float(raw_stage['parsed_distance'])
+    else:
+        stage['distance'] = None
+
     stage['type'] = overview.get('type', '___')
 
     stage['date'] = fix_date(stage.get('date'))
