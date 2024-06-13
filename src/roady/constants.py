@@ -22,7 +22,7 @@ URL_ELEMENTS = {
     },
     'spain': {
         'main': 'vuelta',
-        'abbr': 'xxx',
+        'abbr': 'spain',
         'stage_base': 'default',
     },
     'suisse': {
@@ -30,8 +30,12 @@ URL_ELEMENTS = {
         'abbr': 'tds',
         'stage_base': 'alt',
     },
+    'basque': {
+        'main': 'tour-of-the-basque-country',
+        'abbr': 'eus',
+        'stage_base': 'alt',
+    },
 }
-
 def make_urls(tour, year):
     """ 
     main url
