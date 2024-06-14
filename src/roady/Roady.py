@@ -9,7 +9,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen.canvas import Canvas
 
 from .constants import DATA_DIR, make_urls
-from .make_pdf import make_pdf, make_front_page, print_teams, add_extras
+from .make_pdf import make_pdf, make_front_page, print_teams
+from .draw_img import draw_multi
 from .scraping import (get_stages_overview, get_teams, xget_teams,
                        download_img, scrape_stage)
 
@@ -31,7 +32,8 @@ class Roady:
                  reload_route_jpgs=False,
                  reload_profile_jpgs=False,
                  reload_teams=False, reload_stages_overview=False,
-                 reload_stages=False, teams_url=None, tour_map_url=None):
+                 reload_stages=False, teams_url=None, tour_map_url=None,
+                 no_stages=None):
         """ 
         data_dir/                       - eg 'tour_roadbooks'
             tour_dir/                   - eg 'france_2024'
@@ -133,6 +135,9 @@ class Roady:
 
         while True:
             # if have stages_overview then don't need to infer whether done yet
+            if no_stages is not None and len(self.stages) == no_stages:
+                print('Asked for', no_stages, 'got', len(self.stages))
+                break
             if self.stages_overview and stage_no == len(self.stages_overview):
                 print('Already got', len(self.stages), 'stages, so stopping')
                 break
@@ -251,7 +256,10 @@ class Roady:
                     print("made main for stage", stage['stage_no'])
 
                 elif kind == 'extra':
-                    add_extras(stage['extra_jpgs'], stage_dir, canvas=canvas)
+                    fps = [stage_dir / url.split('/')[-1]
+                           for url in stage['extra_jpgs']]
+                    print(fps)
+                    draw_multi(fps, canvas=canvas)
                     print("made extras for stage", stage['stage_no'])
 
         canvas.save()
@@ -279,16 +287,20 @@ def compose_stage(raw_stage, overview):
 
     stage['date2'] = overview.get('date')
     stage['title2'] = overview.get('title')
-    distance = overview.get('distance')
-
-    if distance is None or not distance.replace('.', '').isnumeric():
-        stage['distance'] = float(raw_stage['parsed_distance'])
-    else:
-        stage['distance'] = None
 
     stage['type'] = overview.get('type', '___')
 
     stage['date'] = fix_date(stage.get('date'))
+
+    distance = overview.get('distance')
+
+    if isinstance(distance, float):
+        stage['distance'] = distance
+
+    elif distance is None or not str(distance).replace('.', '').isnumeric():
+        stage['distance'] = float(raw_stage['parsed_distance'])
+    else:
+        stage['distance'] = None
 
     return stage
 

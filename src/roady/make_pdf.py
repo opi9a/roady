@@ -14,6 +14,7 @@ from PIL import Image
 from PIL.ExifTags import TAGS
 
 from .draw_img import draw_rect_img
+from .Rect import Rect
 
 
 def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=None):
@@ -46,12 +47,14 @@ def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=No
                       text=f"{tour} {year}")
 
 
+    rect = Rect(top=(top - title_h - 0.5), height=14, right=right, left=left)
     # route map
     route_dims = draw_rect_img(
         img_fp=img_fp,
         canvas=canvas,
-        top=(top - title_h - 0.5), height=14,
-        right=right, left=left,
+        rect=rect,
+        # top=(top - title_h - 0.5), height=14,
+        # right=right, left=left,
     )
 
 
@@ -158,11 +161,11 @@ def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None,
     canvas.drawString((left + 4.5)*cm, top*cm, title)
 
     # PROFILE
-    prof_dims = draw_rect_img(
+    rect = Rect(top=(top - top_margin), height=14, right=right, left=left)
+    prof_rect = draw_rect_img(
         img_fp=stage_dirpath / 'profile.jpg',
         canvas=canvas,
-        top = top - top_margin, height=12,
-        right=right, left=left,
+        rect=rect
     )
 
 
@@ -172,7 +175,7 @@ def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None,
     # get the stage distance, d, and the width of the image
     # draw a vertical line each 10km from end
     scale_l = left + l_kms_marg
-    scale_r = scale_l + prof_dims['width'] - r_kms_marg
+    scale_r = scale_l + prof_rect.width - r_kms_marg
     scale_w = scale_r - scale_l
 
     # if drawing the scale, check distance is available
@@ -189,8 +192,8 @@ def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None,
             canvas=canvas,
             start_x=scale_r, scale_w=scale_w,
             stage_km=distance,
-            y0=prof_dims['bottom'],
-            y1=prof_dims['top'],
+            y0=prof_rect.bottom,
+            y1=prof_rect.top,
             minor_unit=1,
         )
     
@@ -199,15 +202,15 @@ def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None,
         canvas.setStrokeColor("red")
         canvas.line(
             scale_l * cm,  # x1
-            prof_dims['bottom'] * cm,
+            prof_rect.bottom * cm,
             scale_l * cm,  # x2
-            prof_dims['top'] * cm,
+            prof_rect.top * cm,
         )
         canvas.line(
             scale_r * cm,  # x1
-            prof_dims['bottom'] * cm,
+            prof_rect.bottom * cm,
             scale_r * cm,  # x2
-            prof_dims['top'] * cm,
+            prof_rect.top * cm,
         )
 
     canvas.setFillAlpha(1)
@@ -216,69 +219,13 @@ def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None,
     route_dims = draw_rect_img(
         img_fp=stage_dirpath / 'route.jpg',
         canvas=canvas,
-        bottom=bottom, height=14,
-        right=right, left=left,
+        rect=Rect(bottom=bottom, height=14, right=right, left=left),
     )
 
     # ends the page
     canvas.showPage()
 
     if file_output:
-        canvas.save()
-
-
-
-def add_extras(extra_jpgs, stage_dirpath, canvas=None, fp_out=None):
-    """ 
-    Make an additional page
-    if 1 or 2 imgs, do 1 per half
-    if 3 split page to 3
-    if 4 do 2 pages
-    """
-    # make a canvas to print out independently if one isn't passed
-    if canvas is None:
-        stand_alone = True
-        canvas = Canvas(Path(fp_out).as_posix(), pagesize=A4, bottomup=True)
-    else:
-        stand_alone = False
-
-
-    top = 27
-    bottom = 3
-    left = 2
-    right = 18
-    top_margin = 1
-
-    title_h = 1
-    max_h = 11
-    margin = 0.5
-
-    img_h = min(max_h,
-                ((top - bottom) / len(extra_jpgs)) - (margin*len(extra_jpgs)))
-
-    last = top
-
-    for jpg in extra_jpgs:
-        # print a title
-        title = jpg.split('/')[-1]
-        canvas.setFont("Helvetica-Bold", 14)
-        canvas.drawString((left + 4.5)*cm, last*cm, title)
-
-        last -= title_h
-
-        # now the img
-        dims = draw_rect_img(
-            img_fp=stage_dirpath / title,
-            canvas=canvas,
-            bottom=last - img_h, top=last,
-            right=right, left=left,
-        )
-
-        last -= (dims['height'] + margin)
-
-    canvas.showPage()
-
-    if stand_alone:
         canvas.save()
 
 
