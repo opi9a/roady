@@ -13,10 +13,11 @@ from reportlab.lib.units import cm
 from PIL import Image
 from PIL.ExifTags import TAGS
 
-from .draw_img import draw_rect_img
+from .draw_img import draw_rect_img, stand_alone
 from .Rect import Rect
 
 
+@stand_alone
 def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=None):
     """
     List of stages and map
@@ -30,12 +31,6 @@ def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=No
     title_h = 1.5
     route_h = 17
 
-    # make a canvas to print out independently if one isn't passed
-    if canvas is None and fp_out is not None:
-        stand_alone = True
-        canvas = Canvas(Path(fp_out).as_posix(), pagesize=A4, bottomup=True)
-    else:
-        stand_alone = False
 
     # title - have to infer tour and year
     if tour is None and year is None:
@@ -53,8 +48,6 @@ def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=No
         img_fp=img_fp,
         canvas=canvas,
         rect=rect,
-        # top=(top - title_h - 0.5), height=14,
-        # right=right, left=left,
     )
 
 
@@ -125,11 +118,9 @@ def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=No
 
     canvas.showPage()
 
-    if stand_alone:
-        canvas.save()
 
-
-def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None, 
+@stand_alone
+def make_stage_page(stage_dict, stage_dirpath, canvas=None, fp_out=None, 
              km_to_go=False, l_kms_marg=0, r_kms_marg=0, 
              start_finish_km_only=False):
     """
@@ -139,13 +130,6 @@ def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None,
     end within profile img
     start_finish_km_only just shows those, for aligning / debug
     """
-
-    file_output = False
-    if canvas is None:
-        out_fp = Path(outpath).as_posix()
-        canvas = Canvas(out_fp, pagesize=A4, bottomup=True)
-        canvas.setFontSize(18)
-        file_output = True
 
     x, y = 0, 0
 
@@ -225,9 +209,6 @@ def make_pdf(stage_dict, stage_dirpath, canvas=None, outpath=None,
     # ends the page
     canvas.showPage()
 
-    if file_output:
-        canvas.save()
-
 
 
 def print_km_to_go(canvas, start_x, scale_w, stage_km, y0, y1,
@@ -285,7 +266,7 @@ def print_km_to_go(canvas, start_x, scale_w, stage_km, y0, y1,
         line_x -= decrement
 
 
-def print_teams(teams, canvas=None, fp_out=None, cols=4):
+def make_teams_page(teams, canvas=None, fp_out=None, cols=4):
     """
     Teams with riders by number on single page
     """

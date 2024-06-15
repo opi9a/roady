@@ -9,8 +9,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen.canvas import Canvas
 
 from .constants import DATA_DIR, make_urls
-from .make_pdf import make_pdf, make_front_page, print_teams
-from .draw_img import draw_multi
+from .make_stage_page import make_stage_page, make_front_page, make_teams_page
+from .draw_img import draw_multi_page
 from .scraping import (get_stages_overview, get_teams, xget_teams,
                        download_img, scrape_stage)
 
@@ -251,7 +251,7 @@ class Roady:
                 stage_dir = self.tour_dir / 'stages' / f"stage_{stage['stage_no']}"
 
                 if kind == 'main':
-                    make_pdf(stage, stage_dirpath=stage_dir, canvas=canvas,
+                    make_stage_page(stage, stage_dirpath=stage_dir, canvas=canvas,
                              km_to_go=True)
                     print("made main for stage", stage['stage_no'])
 
@@ -259,20 +259,20 @@ class Roady:
                     fps = [stage_dir / url.split('/')[-1]
                            for url in stage['extra_jpgs']]
                     print(fps)
-                    draw_multi(fps, canvas=canvas)
+                    draw_multi_page(fps, canvas=canvas)
                     print("made extras for stage", stage['stage_no'])
 
         canvas.save()
 
 
-    def make_teams_pdf(self, pdf_fp=None):
+    def make_teams_pdf_page(self, pdf_fp=None):
         """ 
         Can be handy to have an indepenent pdf of the teams
         """
         if pdf_fp is None:
             pdf_fp = self.fps['teams_pdf']
 
-        print_teams(teams=self.teams, fp_out=pdf_fp)
+        make_teams_page(teams=self.teams, fp_out=pdf_fp)
 
 
 def compose_stage(raw_stage, overview):
