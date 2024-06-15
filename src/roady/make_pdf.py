@@ -13,7 +13,7 @@ from reportlab.lib.units import cm
 from PIL import Image
 from PIL.ExifTags import TAGS
 
-from .draw_img import draw_rect_img, stand_alone
+from .draw_img import draw_rect_img, stand_alone, draw_km_to_go, draw_img
 from .Rect import Rect
 
 
@@ -172,7 +172,7 @@ def make_stage_page(stage_dict, stage_dirpath, canvas=None, fp_out=None,
 
     # draw the scale
     if km_to_go and not start_finish_km_only:
-        print_km_to_go(
+        draw_km_to_go(
             canvas=canvas,
             start_x=scale_r, scale_w=scale_w,
             stage_km=distance,
@@ -211,61 +211,7 @@ def make_stage_page(stage_dict, stage_dirpath, canvas=None, fp_out=None,
 
 
 
-def print_km_to_go(canvas, start_x, scale_w, stage_km, y0, y1,
-                   minor_unit=1):
-    """
-    Make the togo scale
-    """
-    # work out the decrement for the chosen interval (kms)
-    dec_1k = scale_w / float(stage_km)
-    decrement = dec_1k * minor_unit
-
-    canvas.setStrokeColor("lightblue")
-    canvas.setFillColor("lightblue", alpha=0.9)  # for text
-    canvas.setFontSize(8)
-
-    k_to_go = 0
-    line_x = start_x
-
-    while k_to_go < float(stage_km):
-        if k_to_go > 0:
-            
-            # major units are thicker (by alpha)
-            if k_to_go % 10 == 0:
-                canvas.setStrokeAlpha(0.4)
-            elif k_to_go % 5 == 0:
-                canvas.setStrokeAlpha(0.2)
-            else:
-                canvas.setStrokeAlpha(0.0)
-
-            canvas.line(
-                line_x * cm,  # x1
-                y0 * cm,  # y1
-                line_x * cm,  # x2
-                y1 * cm  # y2
-            )
-
-        # always draw top number
-        if k_to_go % 10 == 0:
-            x_nudge = calc_x_nudge(k_to_go)
-            canvas.drawString(
-                (line_x - x_nudge)*cm,
-                y1 * cm,  # y2
-                str(k_to_go)
-            )
-        # at bottom, 0 and 10 overlap the stage length in img
-            if k_to_go >= 20:
-                canvas.drawString(
-                    (line_x - x_nudge)*cm,
-                    (y0-0.2)*cm,
-                    # (y_start-0.2)*cm,
-                    str(k_to_go)
-                )
-
-        k_to_go += minor_unit
-        line_x -= decrement
-
-
+@stand_alone
 def make_teams_page(teams, canvas=None, fp_out=None, cols=4):
     """
     Teams with riders by number on single page
@@ -309,6 +255,56 @@ def make_teams_page(teams, canvas=None, fp_out=None, cols=4):
     if stand_alone:
         canvas.save()
 
+@stand_alone
+def draw_multi_page(img_fps, canvas=None, fp_out=None,
+               **kwargs):
+    """ 
+    Arrange the images at the passed fps and print them
+    kwargs for any formatting stuff eg margins
+    """
+
+    cols, rows = {
+        1: (1, 2), 2: (1, 2),
+        3: (1, 3), 4: (2, 2),
+        5: (2, 3), 6: (2, 3),
+        7: (2, 4), 8: (2, 4),
+    }[len(img_fps)]
+
+    # move left margin in special case of 1 long col
+    if len(img_fps) == 2:
+        left = 3
+    elif len(img_fps) == 3:
+        left = 5
+    else:
+        left = 1
+
+    page = Rect(
+        top=28,
+        bottom=2,
+        left=left,
+        right=21,
+    )
+
+    print(len(img_fps), 'fps, ', cols, 'cols, ', rows, 'rows')
+
+    cell_h = page.height / rows
+    cell_w = page.width / cols
+
+    for i,img in enumerate(img_fps):
+        row, col = divmod(i, cols)
+        print(f"{i:>2} : col {col}, row{row}")
+
+        rect = Rect(
+            top=page.top - (row * cell_h),
+            height=cell_h,
+            left=page.left + (col * cell_w),
+            width=cell_w
+        )
+        draw_img(img, rect, canvas=canvas)
+
+    canvas.showPage()
+
+
 
 def print_team(team, riders,
                x, y, h, w,
@@ -334,22 +330,5 @@ def print_team(team, riders,
         canvas.setFont("Helvetica", 8)
         canvas.drawString(x, new_y, f"{num:>3} {rider}")
         i += 1
-
-
-def calc_x_nudge(k_to_go):
-    """
-    Return the amount to nudge the k_to_go leftwards to align
-    with the line that was drawn
-    """
-    # just set the nudges manually
-    nudge_by_dig = [0, 0.25, 0.41]
-
-    if k_to_go < 10:
-        return nudge_by_dig[0]
-
-    if k_to_go < 100:
-        return nudge_by_dig[1]
-
-    return nudge_by_dig[2]
 
 

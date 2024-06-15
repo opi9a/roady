@@ -9,8 +9,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen.canvas import Canvas
 
 from .constants import DATA_DIR, make_urls
-from .make_stage_page import make_stage_page, make_front_page, make_teams_page
-from .draw_img import draw_multi_page
+from .make_pdf import (make_stage_page, make_front_page, make_teams_page,
+                       draw_multi_page)
 from .scraping import (get_stages_overview, get_teams, xget_teams,
                        download_img, scrape_stage)
 
@@ -242,7 +242,7 @@ class Roady:
                 pass
 
             elif page == 'teams':
-                print_teams(self.teams, canvas=canvas)
+                make_teams_page(self.teams, canvas=canvas)
                 print("made teams")
 
             else:
