@@ -1,126 +1,80 @@
+from copy import copy
 
 class Rect:
     """ 
-    To hold dimensions of a rect, completing any missing
+    To hold dimensions of a rect: top, bottom, left, right.
+
+    Can instantiate with height or width and one other parameter
+    on each dimension.
+
+    Height, width always calculated, and area
+
+    Reports the shape: height / width
     """
     def __init__(self, bottom=None, top=None, height=None,
                  left=None, right=None, width=None):
-        # if bottom is None and (top and height):
-        #     self.bottom = top - height
-        if top is None and (bottom and height):
-            top = bottom + height
-        elif height is None and (bottom and top):
-            height = top - bottom
 
-        if left is None and (right and width):
-            left = right - width
-        elif right is None and (left and width):
-            right = left + width
-        elif width is None and (left and right):
-            width = right - left
+        self.bottom = bottom
+        self.top = top
+        self.left = left
+        self.right = right
 
-        self._bottom = bottom
-        self._top = top
-        self._height = height
-        self._left = left
-        self._right = right
-        self._width = width
+        if self.bottom is None and (top and height):
+            self.bottom = top - height
 
-    def check(self):
-        if not self.ok:
-            raise ValueError('this rect is wrong')
+        if self.top is None and (bottom and height):
+            self.top = bottom + height
 
-    @property
-    def bottom(self):
-        if self._bottom is not None:
-            return self._bottom
-        if self._bottom is None and (self._top and self._height):
-            return self._top - self._height
+        if self.left is None and (right and width):
+            self.left = right - width
 
-    @bottom.setter
-    def bottom(self, value):
-        self._bottom = value
-
-
-    @property
-    def top(self):
-        if self._top is not None:
-            return self._top
-        if self._top is None and (self._bottom and self._height):
-            return self._bottom + self._height
-
-    @top.setter
-    def top(self, value):
-        self._top = value
-
+        if self.right is None and (left and width):
+            self.right = left + width
 
     @property
     def height(self):
-        if self._height is not None:
-            return self._height
-        if self._height is None and (self._bottom and self._top):
-            return self._top - self._bottom
-
-    @height.setter
-    def height(self, value):
-        self._height = value
-
-
-    @property
-    def left(self):
-        if self._left is not None:
-            return self._left
-        if self._left is None and (self._right and self._width):
-            return self._right - self._width
-
-    @left.setter
-    def left(self, value):
-        self._left = value
-
-
-    @property
-    def right(self):
-        if self._right is not None:
-            return self._right
-        if self._right is None and (self._left and self._width):
-            return self._left + self._width
-
-    @right.setter
-    def right(self, value):
-        self._right = value
-
+        return self.top - self.bottom
 
     @property
     def width(self):
-        if self._width is not None:
-            return self._width
-        if self._width is None and (self._left and self._right):
-            return self._right - self._left
-
-    @width.setter
-    def width(self, value):
-        self._width = value
-
+        return self.right - self.left
 
     @property
-    def ok(self):
+    def area(self):
+        return abs(self.height * self.width)
+
+    @property
+    def shape(self):
+        return self.height / self.width
+
+    def __mul__(self, value):
         """ 
-        Checks the dims are all available and consistent
+        Return a new rect with all dimensions multiplied by the passed value
         """
 
-        try:
-            assert self.top - self.bottom == self.height
-        except:
-            print('problem with y axis')
-            return False
+        out = copy(self)
+        for k, v in out.__dict__.items():
+            out.__dict__[k] = v * value
 
-        try:
-            assert self.right - self.left == self.width
-        except:
-            print('problem with x axis')
-            return False
+        return out
+        
 
-        return True
+    def fit_to_max(self, height, width):
+        """ 
+        Returns a rect fitted to a passed height and width,
+        without changing the shape
+        """
+
+        # work out which dimension needs to scale most and do that one only
+        # if image shape too tall, means need to scale to the height
+        if self.shape > height / width:
+            return self * (height / self.height)
+
+        # image too wide, scale to the width
+        elif self.shape < height / width:
+            return self * (width / self.width)
+
+        return copy(self)
 
     def __repr__(self):
         return (
@@ -133,5 +87,3 @@ class Rect:
             f"width={self.width}"
             ")"
         )
-
-

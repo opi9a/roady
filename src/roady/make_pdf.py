@@ -146,11 +146,14 @@ def make_stage_page(stage_dict, stage_dirpath, canvas=None, fp_out=None,
 
     # PROFILE
     rect = Rect(top=(top - top_margin), height=14, right=right, left=left)
+    print('rect in scale', rect.height / rect.width)
     prof_rect = draw_rect_img(
-        img_fp=stage_dirpath / 'profile.jpg',
+        img_fp=Path(stage_dirpath) / 'profile.jpg',
         canvas=canvas,
         rect=rect
     )
+
+    print('prof_rect scale', prof_rect.height / prof_rect.width)
 
 
     # ADD A TO-GO SCALE TO THE PROFILE

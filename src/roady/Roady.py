@@ -364,7 +364,7 @@ def make_page_order(stages, double_sided=True, repeat_teams=True, max_teams=Fals
 
 def print_plan(plan):
     """ 
-    Debugery
+    Debugging make_page_order
     """
 
     for i, p in enumerate(plan):

@@ -24,6 +24,9 @@ def stand_alone(func):
     # this is what will actually be run when calling func
     def wrapper(*args, **kwargs):
         # make a canvas if reqd
+        if 'fp_out' in kwargs:
+            kwargs['fp_out'] = Path(kwargs['fp_out'])
+
         if kwargs.get('canvas') is None and kwargs.get('fp_out') is not None:
             stand_alone = True
             canvas = Canvas(Path(kwargs['fp_out']).as_posix(), pagesize=A4, bottomup=True)
@@ -82,31 +85,38 @@ def draw_rect_img(img_fp=None, canvas=None, fp_out=None, dims_only=False,
     does not showPage
     """
     # make scaled versions
+    # take in image -> h, w and rect to draw in h, w
+    # create a 3rd rect to actually draw
     i_dict = Image.open(img_fp)
+    img_h = i_dict.height
+    img_w = i_dict.width
+    print('image in - h:', img_h, 'w:', img_w, 'shape:', img_h/img_w)
     s_h, s_w = scale_image(i_dict.height, i_dict.width, rect.height, rect.width)
+    print('scaled -> w:', s_w, 'h:', s_h)
 
-    actual = Rect(height=s_h, width=s_w)
+    actual = Rect(left=rect.left, top=rect.top, height=s_h, width=s_w)
+    print('actual shape to draw in:', actual.shape)
 
-    if not from_bottom:
-        actual.top = rect.top
-        actual.bottom = rect.top - s_h
-    else:
-        actual.bottom = rect.bottom
-        actual.top = rect.bottom + s_h
+    # if not from_bottom:
+    #     actual.top = rect.top
+    #     actual.bottom = rect.top - s_h
+    # else:
+    #     actual.bottom = rect.bottom
+    #     actual.top = rect.bottom + s_h
 
-    if not from_right:
-        actual.left = rect.left
-        actual.right = rect.left + s_h
-    else:
-        actual.right = rect.right
-        actual.left = rect.right - s_h
+    # if not from_right:
+    #     actual.left = rect.left
+    #     actual.right = rect.left + s_h
+    # else:
+    #     actual.right = rect.right
+    #     actual.left = rect.right - s_h
 
     # actually draw it
     if not dims_only:
         canvas.drawInlineImage(
             img_fp.as_posix(),
             x = actual.left * cm,
-            y = (actual.top - actual.height) * cm,
+            y = actual.bottom * cm,
             height = actual.height * cm,
             width = actual.width * cm,
         )
@@ -184,7 +194,7 @@ def scale_image(i_h, i_w, max_h, max_w):
     else:
         out = i_h * (max_w / i_w), max_w
 
-    return  out
+    return out
 
 
 def calc_x_nudge(k_to_go):
