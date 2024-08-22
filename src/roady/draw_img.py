@@ -134,7 +134,6 @@ def draw_km_to_go(canvas, start_x, scale_w, stage_km, y0, y1,
     decrement = dec_1k * minor_unit
 
     canvas.setStrokeColor("lightblue")
-    canvas.setFillColor("lightblue", alpha=0.9)  # for text
     canvas.setFontSize(8)
 
     k_to_go = 0
@@ -161,6 +160,7 @@ def draw_km_to_go(canvas, start_x, scale_w, stage_km, y0, y1,
         # always draw top number
         if k_to_go % 10 == 0:
             x_nudge = calc_x_nudge(k_to_go)
+            canvas.setFillColor("lightblue", alpha=0.9)  # for text
             canvas.drawString(
                 (line_x - x_nudge)*cm,
                 y1 * cm,  # y2
@@ -168,6 +168,7 @@ def draw_km_to_go(canvas, start_x, scale_w, stage_km, y0, y1,
             )
         # at bottom, 0 and 10 overlap the stage length in img
             if k_to_go >= 20:
+                canvas.setFillColor("steelblue", alpha=0.9)  # for text
                 canvas.drawString(
                     (line_x - x_nudge)*cm,
                     (y0-0.2)*cm,
