@@ -18,9 +18,10 @@ from .Rect import Rect
 
 
 @stand_alone
-def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=None):
+def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=None, no_map=False):
     """
     List of stages and map
+    Pass no_map = True to not print that jpg eg to save ink
     """
     top = 29
     bottom = 2
@@ -44,11 +45,12 @@ def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=No
 
     rect = Rect(top=(top - title_h - 0.5), height=14, right=right, left=left)
     # route map
-    route_dims = draw_rect_img(
-        img_fp=img_fp,
-        canvas=canvas,
-        rect=rect,
-    )
+    if not no_map:
+        route_dims = draw_rect_img(
+            img_fp=img_fp,
+            canvas=canvas,
+            rect=rect,
+        )
 
 
     new_stages = []

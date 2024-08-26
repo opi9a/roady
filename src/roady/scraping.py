@@ -18,6 +18,9 @@ def get_stages_overview(url=None, soup=None):
 
     if soup is None:
         req = requests.get(url)
+        if not req.ok:
+            raise ValueError("cannot download image from", url)
+
         soup = BeautifulSoup(req.text, 'html.parser')
 
     tds = soup.find_all('td')
@@ -73,39 +76,6 @@ def get_teams(url=None, soup=None, just_return_soup=False):
 
     return teams
 
-def xget_teams(url=None, soup=None, just_return_soup=False):
-    """
-    Return a dict of riders with numbers by team
-    """
-
-    if soup is None:
-        req = requests.get(url)
-        soup = BeautifulSoup(req.text, 'html.parser')
-
-        if just_return_soup:
-            return soup
-
-    # this makes a list of block elements, one per team
-    itals = soup.find_all('i')
-
-    teams = {}
-    for ital in itals:
-        team = ital.text
-        # teams[team] = {}
-
-        riders_str = ital.next_sibling.next_sibling
-        # riders = [x.strip() for x in riders_str.split(",")]
-        riders = {
-            str(i+1): x.strip()
-            for i,x in enumerate(riders_str.split(","))
-        } 
-        # numbers = re.split"\D*\s", riders_str[1:-1]
-
-        # teams[team] = dict(zip(numbers, riders))
-        teams[team] = riders
-
-    return teams
-
 
 def scrape_stage(url, soup=None, return_soup=False):
     """
@@ -119,6 +89,7 @@ def scrape_stage(url, soup=None, return_soup=False):
         req = requests.get(url)
 
         if not req.ok:
+            print('cannot get a stage from', url)
             return None
 
         soup = BeautifulSoup(req.text, features='html.parser')
@@ -202,6 +173,10 @@ def download_img(url, img_fp):
     Download an img from the requested url and save to fp
     """
     req = requests.get(url, stream=True)
+
+    if not req.ok:
+        raise ValueError("cannot download image from", url)
+
     print('img downloading', url, end="..")
     
     with open(img_fp, 'wb') as fp:

@@ -21,7 +21,7 @@ URL_ELEMENTS = {
         'stage_base': 'alt',
     },
     'spain': {
-        'main': 'vuelta',
+        'main': 'vuelta-spain',
         'abbr': 'spain',
         'stage_base': 'default',
     },

@@ -33,6 +33,7 @@ class Roady:
                  reload_profile_jpgs=False,
                  reload_teams=False, reload_stages_overview=False,
                  reload_stages=False, teams_url=None, tour_map_url=None,
+                 stages_overview_url=None,
                  no_stages=None):
         """ 
         data_dir/                       - eg 'tour_roadbooks'
@@ -80,6 +81,8 @@ class Roady:
         if not self.fps['urls'].exists() or reload_main_urls:
             print('making main urls json and saving')
             self.urls = make_urls(tour, year)
+            if stages_overview_url is not None:
+                self.urls['main'] = stages_overview_url
             with open(self.fps['urls'], 'w') as fp:
                 json.dump(self.urls, fp, indent=4)
 
@@ -87,6 +90,9 @@ class Roady:
             print('loading urls json from', self.fps['urls'])
             with open(self.fps['urls'], 'r') as fp:
                 self.urls = json.load(fp)
+
+        if stages_overview_url is not None:
+            self.urls['main'] = stages_overview_url
 
         # download the OVERALL ROUTE jpg
         if not self.fps['route'].exists():
@@ -298,23 +304,28 @@ def compose_stage(raw_stage, overview):
         stage['distance'] = distance
 
     elif distance is None or not str(distance).replace('.', '').isnumeric():
-        stage['distance'] = float(raw_stage['parsed_distance'])
+        try:
+            stage['distance'] = float(raw_stage['parsed_distance'])
+        except:
+            stage['distance'] = None
     else:
         stage['distance'] = None
 
     return stage
 
-
 def fix_date(dt_str):
     """ 
     Fix up any errors found in the site's dates - it happens
     """
+    date_fixes = {
+        'dag': 'day',
+        'Juli': 'July',
+        'Augustus': 'August',
+    }
 
-    if 'dag' in dt_str:
-        dt_str = dt_str.replace('dag', 'day')
-
-    if 'Juli' in dt_str:
-        dt_str = dt_str.replace('Juli', 'July')
+    for error, fix in date_fixes.items():
+        if error in dt_str:
+            dt_str = dt_str.replace(error, fix)
 
     return dt_str
 
