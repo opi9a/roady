@@ -2,8 +2,10 @@ from pathlib import Path
 import re
 
 from reportlab.pdfgen.canvas import Canvas
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.units import cm
+
+from my_tools.pdf.pdf_tools import stand_alone
 
 from PIL import Image
 from PIL.ExifTags import TAGS
@@ -14,35 +16,6 @@ from .Rect import Rect
 Functions for drawing elements only
 Will not call showPage unless as stand_alone
 """
-
-def stand_alone(func):
-    """ 
-    Decorator which allows a drawing func to either use the canvas passed
-    or make its own and complete printing to that
-    """
-
-    # this is what will actually be run when calling func
-    def wrapper(*args, **kwargs):
-        # make a canvas if reqd
-        if 'fp_out' in kwargs:
-            kwargs['fp_out'] = Path(kwargs['fp_out'])
-
-        if kwargs.get('canvas') is None and kwargs.get('fp_out') is not None:
-            stand_alone = True
-            canvas = Canvas(Path(kwargs['fp_out']).as_posix(), pagesize=A4, bottomup=True)
-            out = func(*args, canvas=canvas, **kwargs)
-        else:
-            stand_alone = False
-            out = func(*args, **kwargs)
-
-        if stand_alone:
-            canvas.showPage()
-            canvas.save()
-
-        return out
-    
-    return wrapper
-
 
 @stand_alone
 def draw_img(img_fp, rect, title=None, canvas=None, fp_out=None, margins=0.4,

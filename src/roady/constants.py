@@ -11,7 +11,7 @@ URL_ELEMENTS = {
         'stage_base': 'default',
     },
     'italy': {
-        'main': 'giro',
+        'main': 'giro-italy',
         'abbr': 'italy',
         'stage_base': 'default',
     },

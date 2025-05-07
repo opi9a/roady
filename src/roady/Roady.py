@@ -11,7 +11,7 @@ from reportlab.pdfgen.canvas import Canvas
 from .constants import DATA_DIR, make_urls
 from .make_pdf import (make_stage_page, make_front_page, make_teams_page,
                        draw_multi_page)
-from .scraping import (get_stages_overview, get_teams, xget_teams,
+from .scraping import (get_stages_overview, get_teams, # xget_teams,
                        download_img, scrape_stage)
 
 class Roady:
@@ -65,31 +65,19 @@ class Roady:
             print('creating dir', self.tour_dir)
             self.tour_dir.mkdir()
 
+        self.fps = None
+        if auto:
+            self.get_fps()
         # first specify the filepaths - each of which will then be populated
         # if required / possible
-        self.fps = {
-            'urls': self.tour_dir / 'urls.json',
-            'route': self.tour_dir / 'route.jpg',
-            'teams': self.tour_dir / 'teams.json',
-            'stages_overview': self.tour_dir / 'stages_overview',
-            'stages_dir': self.tour_dir / 'stages/',
-            'roadbook': self.tour_dir / 'roadbook.pdf',
-            'teams_pdf': self.tour_dir / 'teams.pdf',
-        }
 
         # make the URLS we are going to need, if not already there
-        if not self.fps['urls'].exists() or reload_main_urls:
-            print('making main urls json and saving')
-            self.urls = make_urls(tour, year)
-            if stages_overview_url is not None:
-                self.urls['main'] = stages_overview_url
-            with open(self.fps['urls'], 'w') as fp:
-                json.dump(self.urls, fp, indent=4)
+        self.urls = None
+        if auto:
+            self.urls = self.get_urls()
 
-        else:
-            print('loading urls json from', self.fps['urls'])
-            with open(self.fps['urls'], 'r') as fp:
-                self.urls = json.load(fp)
+        if tour_map_url is not None:
+            self.urls['route'] = tour_map_url
 
         if stages_overview_url is not None:
             self.urls['main'] = stages_overview_url
@@ -112,7 +100,7 @@ class Roady:
 
             else:
                 print('cannot use main teams parser - trying alternate')
-                self.teams = xget_teams(self.urls['riders'])
+                self.teams = get_teams(self.urls['riders'])
 
             if self.teams:
                 with open(self.fps['teams'], 'w') as fp:
@@ -203,6 +191,31 @@ class Roady:
                         download_img(j, fp)
                     else:
                         print('already have extra jpg', title)
+
+    def get_urls(self):
+        if not self.fps['urls'].exists() or reload_main_urls:
+            print('making main urls json and saving')
+            self.urls = make_urls(tour, year)
+            if stages_overview_url is not None:
+                self.urls['main'] = stages_overview_url
+            with open(self.fps['urls'], 'w') as fp:
+                json.dump(self.urls, fp, indent=4)
+
+        else:
+            print('loading urls json from', self.fps['urls'])
+            with open(self.fps['urls'], 'r') as fp:
+                self.urls = json.load(fp)
+
+    def get_fps(self):
+        return {
+            'urls': self.tour_dir / 'urls.json',
+            'route': self.tour_dir / 'route.jpg',
+            'teams': self.tour_dir / 'teams.json',
+            'stages_overview': self.tour_dir / 'stages_overview',
+            'stages_dir': self.tour_dir / 'stages/',
+            'roadbook': self.tour_dir / 'roadbook.pdf',
+            'teams_pdf': self.tour_dir / 'teams.pdf',
+        }
 
 
     def __get_value__(self, name):
