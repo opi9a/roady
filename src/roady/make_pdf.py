@@ -36,7 +36,7 @@ def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=No
     # title - have to infer tour and year
     if tour is None and year is None:
         tour, year = re.search(
-            "roadbooks/(\S*)_(\d*)/route.jpg", str(img_fp)).groups()
+            r"roadbooks/(\S*)_(\d*)/route.jpg", str(img_fp)).groups()
 
     canvas.setFont("Helvetica-Bold", 20)
     canvas.drawString((left + 5) * cm, (top - title_h) * cm,
@@ -55,10 +55,9 @@ def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=No
 
     new_stages = []
 
-    fmt = "%A %d %B"
     prev_stage_dt = None
     for stage in stages:
-        dt = datetime.strptime(stage['date'], fmt)
+        dt = datetime.fromisoformat(stage['dt'])
 
         if prev_stage_dt is not None:
             gap = (dt - prev_stage_dt).days
@@ -68,10 +67,13 @@ def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=No
         if gap > 1:
             new_dt = dt - timedelta(days=1)
             new_stages.append({'type': 'rest day', 
-                               'date': new_dt.strftime(fmt)})
+                               'weekday': new_dt.strftime("%a"),
+                               'date': new_dt.strftime("%d %b")})
         new_stages.append(stage)
         new_stages[-1]['stage_no'] = str(new_stages[-1]['stage_no'])
         new_stages[-1]['distance'] = str(new_stages[-1]['distance'])
+        new_stages[-1]['weekday'] = dt.strftime("%a")
+        new_stages[-1]['date'] = dt.strftime("%d %b")
 
         prev_stage_dt = dt
 
@@ -82,17 +84,20 @@ def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=No
 
     # column headings
     col_xs = {
-        'date': 2,
-        'stage_no': 6.5,
-        'from_to': 7.5,
-        'distance': 15,
-        'type': 17,
+        'weekday': 2,
+        'date': 3,
+        'stage_no': 4.5,
+        'from_to': 5.5,
+        'distance': 14,
+        'type': 16,
     }
 
     canvas.setFont("Helvetica-Bold", 10)
 
     for col, x in col_xs.items():
-        if col == 'from_to': text = "from-to"
+        if col == 'from_to':text = "from-to"
+        elif col == 'weekday': text = "date"
+        elif col == 'date': text = ""
         elif col == 'stage_no': text = "no"
         elif col == 'distance': text = "km"
         else: text = col
@@ -107,10 +112,13 @@ def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=No
         y = (y0 - (lh * i))
 
         if stage['type'] == 'rest day':
+            canvas.setFillAlpha(0.5)
+            canvas.drawString(col_xs['weekday'] * cm, y * cm, text=stage['weekday'])
             canvas.drawString(col_xs['date'] * cm, y * cm, text=stage['date'])
             canvas.drawString(col_xs['stage_no'] * cm, y * cm,
                               text=f'{"-"*48} REST DAY {"-"*48}')
             i += 1
+            canvas.setFillAlpha(1)
             continue
 
         for col, x in col_xs.items():
@@ -268,11 +276,22 @@ def draw_multi_page(img_fps, canvas=None, fp_out=None,
     kwargs for any formatting stuff eg margins
     """
 
+    if len(img_fps) > 10:
+        print('have too many imgs in this stage')
+        print('will omit:')
+        for img in img_fps[10:]:
+            print(img.name)
+
+        img_fps = img_fps[:9]
+
+
     cols, rows = {
         1: (1, 2), 2: (1, 2),
         3: (1, 3), 4: (2, 2),
         5: (2, 3), 6: (2, 3),
         7: (2, 4), 8: (2, 4),
+        8: (2, 5), 9: (2, 5),
+        10: (3, 4), 11: (3, 4),
     }[len(img_fps)]
 
     # move left margin in special case of 1 long col

@@ -44,7 +44,18 @@ def draw_img(img_fp, rect, title=None, canvas=None, fp_out=None, margins=0.4,
         right=rect.right - margins,
     )
 
-    draw_rect_img(img_fp, canvas, rect=actual)
+    if img_fp.exists():
+        draw_rect_img(img_fp, canvas, rect=actual)
+    else:
+        canvas.rect(actual.left*cm,
+                    actual.bottom*cm,
+                    actual.width*cm,
+                    actual.height*cm)
+        canvas.drawstring(
+            (actual.left+0.5)*cm,
+            (actual.top-0.5)*cm,
+            f'file {img_fp} doesnt exist'
+        )
 
     return actual
 

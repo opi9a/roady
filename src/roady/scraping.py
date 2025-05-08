@@ -5,6 +5,7 @@ Scripts to scrape:
 """
 import requests
 from bs4 import BeautifulSoup
+from datetime import datetime
 import re
 import shutil
 
@@ -51,30 +52,41 @@ def get_stages_overview(url=None, soup=None):
 def get_teams(url=None, soup=None, just_return_soup=False):
     """
     Return a dict of riders with numbers by team
+    NB numbers may not be available before, so some pissing about reqd
     """
 
     if soup is None:
         req = requests.get(url)
+
+        if not req.ok:
+            raise ValueError("cannot download teams from", url)
+
         soup = BeautifulSoup(req.text, 'html.parser')
 
         if just_return_soup:
             return soup
 
     # this makes a list of block elements, one per team
-    blocks = soup.find_all(attrs={'class': 'block'})
+    blocks = soup.find_all(class_='block')
 
     teams = {}
     for block in blocks:
-        team = block.find('i').text
-        teams[team] = {}
+        elems = re.split(r"\s(\d{1,3}\.)", block.text)
+        team_name = elems.pop(0).strip()
 
-        riders_str = block.text.split(team)[1]
-        riders = re.split(" \d{1,3}\.? ", riders_str)[1:]
-        numbers = re.split("\D*\s", riders_str)[1:-1]
+        nums, riders = [], []
+        for i, elem in enumerate(elems):
+            if i % 2 == 0:
+                num = int(elem.replace('.', ''))
+                nums.append(num)
+            else:
+                riders.append(elem.strip())
 
-        teams[team] = dict(zip(numbers, riders))
-
+        teams[team_name] = {num: rider
+                            for num, rider in zip(nums, riders)}
+        
     return teams
+
 
 
 def scrape_stage(url, soup=None, return_soup=False):
@@ -83,7 +95,7 @@ def scrape_stage(url, soup=None, return_soup=False):
     (Much of this not used yet)
     """
 
-    stage_no = re.search('stage-(\d*)-', url).groups()[0]
+    stage_no = re.search(r'stage-(\d*)-', url).groups()[0]
 
     if soup is None:
         req = requests.get(url)
@@ -97,11 +109,12 @@ def scrape_stage(url, soup=None, return_soup=False):
         if return_soup:
             return soup
 
-    stage_date, description = get_description(soup)
+    stage_date, description, dt = get_description(soup)
 
     out = {
         "url": url,
         "date": stage_date,
+        "dt": dt,
         "stage_no": int(stage_no),
         "from_to": None,
         "description": None,
@@ -160,12 +173,20 @@ def get_description(soup):
     This is a bit tricky so separate function
     Returns date, description
     """
+    DT_RE = r"(\w*?),\s(\d{1,2})\s?(\w*?)\s"
 
-    out = soup.find_all(attrs={'itemprop': 'headline'})[1].text
-    date = out.split(' - ')[0].strip()
-    desc = out[(len(date) + 2):].strip()
+    out = soup.find_all('p')[0].text
+    weekday, day, month = re.search(DT_RE, out).groups()
 
-    return date, desc
+    desc = "".join(out.split(month)[1:]).strip()
+    desc = re.sub(rf"\s?[{chr(8211)}-]\s", '', desc)
+
+
+    date = f"{weekday} {day} {month}"
+    dt = datetime.strptime(date, "%A %d %B")
+    dt = dt.replace(year = datetime.now().year)
+
+    return date, desc, dt.isoformat()
 
 
 def download_img(url, img_fp):

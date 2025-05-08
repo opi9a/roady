@@ -2,7 +2,8 @@ from pathlib import Path
 
 ROOT = "https://www.cyclingstage.com/"
 
-DATA_DIR = Path('~/tour_roadbooks').expanduser()
+DATA_DIR = Path(__file__).parent.parent.parent / 'data'
+
 
 URL_ELEMENTS = {
     'france': {
