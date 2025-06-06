@@ -122,6 +122,7 @@ def draw_km_to_go(canvas, start_x, scale_w, stage_km, y0, y1,
 
     k_to_go = 0
     line_x = start_x
+    print('start x is', start_x)
 
     while k_to_go < float(stage_km):
         if k_to_go > 0:

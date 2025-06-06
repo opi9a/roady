@@ -132,13 +132,17 @@ def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=No
 @stand_alone
 def make_stage_page(stage_dict, stage_dirpath, canvas=None, fp_out=None, 
              km_to_go=False, l_kms_marg=0, r_kms_marg=0, 
-             start_finish_km_only=False):
+             start_finish_km_only=False, calibrate_profile=False):
     """
     Compose a pdf page for a stage.
     Pass a canvas or an outpath
     l_kms_marg and r_kms_marg for aligning the kms to go with start and
     end within profile img
     start_finish_km_only just shows those, for aligning / debug
+
+    test with a stage dict element of roady and its dirpath
+    on disk eg rd.stages[4],
+               DATA_DIR / 'france_25/stages/stage_3'
     """
 
     x, y = 0, 0
@@ -165,6 +169,59 @@ def make_stage_page(stage_dict, stage_dirpath, canvas=None, fp_out=None,
 
     print('prof_rect scale', prof_rect.height / prof_rect.width)
 
+    # calibration
+    # add lines to manually check where km0 / finish are
+    if calibrate_profile:
+        mm_inward = 21
+        seg_l = 0.3
+        i = 0
+        canvas.setFontSize(3)
+        canvas.setStrokeColor('red', alpha=0.5)
+
+        while i < mm_inward:
+
+            x_left = prof_rect.left + (i * 0.1)
+            x_right = rect.right - (i * 0.1)
+            cal_top = prof_rect.top
+
+            # mm marks above
+            canvas.drawCentredString(
+                x_left*cm, (cal_top+0.1)*cm, str(i%10))
+            canvas.drawCentredString(
+                x_right*cm, (cal_top+0.1)*cm, str(i%10))
+
+            for j in range(10):
+
+                l_top = cal_top - (j * seg_l)
+
+                # left scale
+                canvas.line((x_left + (j * 0.01)) * cm,
+                            l_top * cm,
+                            (x_left + (j * 0.01)) * cm,
+                            (l_top - seg_l) * cm,
+                            )
+
+                # right scale
+                canvas.line((x_right - (j * 0.01)) * cm,
+                            l_top * cm,
+                            (x_right - (j * 0.01)) * cm,
+                            (l_top - seg_l) * cm,
+                            )
+                
+                if i == 0:
+                    # tenth of mm marks on side
+                    canvas.drawString(
+                        (x_left - 0.1) *cm,
+                        (cal_top - ((j + 0.5) * seg_l)) *cm,
+                        str(j%10))
+                    canvas.drawString(
+                        (x_right + 0.1) *cm,
+                        (cal_top - ((j + 0.5) * seg_l)) *cm,
+                        str(j%10))
+
+
+            i += 1
+
 
     # ADD A TO-GO SCALE TO THE PROFILE
     # set up dimensions and location of to-go scale
@@ -172,7 +229,7 @@ def make_stage_page(stage_dict, stage_dirpath, canvas=None, fp_out=None,
     # get the stage distance, d, and the width of the image
     # draw a vertical line each 10km from end
     scale_l = left + l_kms_marg
-    scale_r = scale_l + prof_rect.width - r_kms_marg
+    scale_r = left + prof_rect.width - r_kms_marg
     scale_w = scale_r - scale_l
 
     # if drawing the scale, check distance is available
@@ -345,7 +402,7 @@ def print_team(team, riders,
     lh = (h / (len(riders) + 2))
     
     canvas.setFont("Helvetica-Bold", 8)
-    canvas.drawString(x, y, team)
+    canvas.drawString(x, y, team.replace('Israel', 'Genocidal'))
 
     
     i = 1

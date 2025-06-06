@@ -72,7 +72,7 @@ def get_teams(url=None, soup=None, just_return_soup=False):
     teams = {}
     for block in blocks:
         elems = re.split(r"\s(\d{1,3}\.)", block.text)
-        team_name = elems.pop(0).strip()
+        team_name = elems.pop(0).strip().replace('Israel', 'Genocidal')
 
         nums, riders = [], []
         for i, elem in enumerate(elems):

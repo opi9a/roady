@@ -2,6 +2,7 @@ import sys
 import re
 import requests
 import json
+import pandas as pd
 from pathlib import Path
 from datetime import datetime
 
@@ -84,7 +85,27 @@ class Roady:
             'roadbook': self.tour_dir / 'roadbook.pdf',
             'teams_pdf': self.tour_dir / 'teams.pdf',
             'urls': self.tour_dir / 'urls.json',
+            'calibration': self.tour_dir / 'calibration.pdf',
+            'profile_adjustments': (self.tour_dir
+                                    / 'profile_adjustments.csv'),
         }
+
+        if not self.fps['profile_adjustments'].exists():
+            print("""
+                  There is no profile_adjustments.csv
+                  If you run rd.calib_profiles it will make a pdf with
+                  calibration scales for each profile.
+                  Record the left and right adjustments, and 
+                  save to tour_dir / 'profile_adjustments.csv'
+                  use these in l_kms_marg and r_kms_marg args
+                  of make_stage_page.
+                  """)
+            u_in = input('press a key')
+            self.profile_adjustments = None
+        else:
+            self.profile_adjustments = pd.read_csv(
+                self.fps['profile_adjustments'], index_col='stage'
+            )
 
         # first specify the filepaths - each of which will then be populated
         # if required / possible
@@ -315,11 +336,16 @@ class Roady:
 
             else:
                 stage_str, kind = page.split()
-                stage = self.stages[int(stage_str) - 1]
-                stage_dir = self.tour_dir / 'stages' / f"stage_{stage['stage_no']}"
+                stage_no = int(stage_str)
+                stage = self.stages[stage_no - 1]
+                stage_dir = self.tour_dir / 'stages' / f"stage_{stage_no}"
 
                 if kind == 'main':
+                    l_adj, r_adj = (
+                        self.profile_adjustments.loc[stage_no] / 100)
+
                     make_stage_page(stage, stage_dirpath=stage_dir,
+                                    l_kms_marg=l_adj, r_kms_marg=r_adj,
                                     canvas=canvas, km_to_go=True)
                     print("made main for stage", stage['stage_no'])
 
@@ -352,6 +378,21 @@ class Roady:
             pdf_fp = self.fps['teams_pdf']
 
         make_teams_page(teams=self.teams, fp_out=pdf_fp)
+
+    def calib_profiles(self):
+        """
+        Draw profile for each stage with lines to calibrate start/finish
+        """
+        fp_out = self.tour_dir / 'calibration.pdf'
+        canvas = Canvas(fp_out.as_posix())
+        for stage in self.stages:
+            stage_dir = self.fps['stages_dir'] / f"stage_{stage['stage_no']}"
+
+            make_stage_page(stage, stage_dir,
+                            canvas=canvas, calibrate_profile=True)
+            canvas.showPage()
+        print('saving calibration to', canvas._filename)
+        canvas.save()
 
 
 def compose_stage(raw_stage, overview):
