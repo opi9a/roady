@@ -13,7 +13,9 @@ from .constants import DATA_DIR, make_urls
 from .make_pdf import (make_stage_page, make_front_page, make_teams_page,
                        draw_multi_page)
 from .scraping import (get_stages_overview, get_teams,  # xget_teams,
-                       download_img, scrape_stage)
+                       dl_img, scrape_cs_stage_url)
+
+from .get_teams import get_teams_json
 
 
 class Roady:
@@ -29,25 +31,19 @@ class Roady:
     may need to pass teams url or tour_map_url separately
     """
 
-    def __init__(self, tour, year, data_dir=None, auto=False,
-                 reload_main_urls=False,
-                 reload_route_jpgs=False,
-                 reload_profile_jpgs=False,
-                 reload_teams=False, reload_stages_overview=False,
-                 reload_stages=False, teams_url=None, tour_map_url=None,
-                 stages_overview_url=None,
-                 no_stages=None):
+    def __init__(self, tour, year, data_dir=None, try_teams=False):
         """ 
+        Teams are only ready a few days before.
         Basic idea is:
             0. make filepaths where resources shd be on disk
             1. load resources:
                 - from disk if there
                 - if not download them
                     - will need urls
-
+;
         The fs is:
         data_dir/                       - eg 'tour_roadbooks'
-            tour_dir/                   - eg 'france_2024'
+            race_dir/                   - eg 'france_2024'
                 urls.json
                 route.jpg               - the overall route
                 teams.json
@@ -61,10 +57,20 @@ class Roady:
                         profile.jpg
 
         Make roadbook
+        
+        IN PROGRESS:
+            record self.history so it doesn't just fail silently
+            report them
+        TODO
+            use procyclngstats:
+                stage data includes elevation
+                alt route imgs (fall back?)
         """
 
         self.tour = tour  # eg 'italy'
-        self.year = year  # eg 'italy'
+        self.year = year  # eg 2025
+
+        self.history = []
 
         # Make filepaths for where resources should be
         if data_dir is None:
@@ -72,21 +78,21 @@ class Roady:
         else:
             self.data_dir = Path(data_dir).expanduser()
 
-        self.tour_dir = self.data_dir / f'{tour}_{year}'
-        if not self.tour_dir.exists():
-            print('creating dir', self.tour_dir)
-            self.tour_dir.mkdir()
+        self.race_dir = self.data_dir / f'{tour}_{year}'
+        if not self.race_dir.exists():
+            print('creating dir', self.race_dir)
+            self.race_dir.mkdir()
 
         self.fps = {
-            'route': self.tour_dir / 'route.jpg',
-            'teams': self.tour_dir / 'teams.json',
-            'stages_overview': self.tour_dir / 'stages_overview',
-            'stages_dir': self.tour_dir / 'stages/',
-            'roadbook': self.tour_dir / 'roadbook.pdf',
-            'teams_pdf': self.tour_dir / 'teams.pdf',
-            'urls': self.tour_dir / 'urls.json',
-            'calibration': self.tour_dir / 'calibration.pdf',
-            'profile_adjustments': (self.tour_dir
+            'route': self.race_dir / 'route.jpg',
+            'teams': self.race_dir / 'teams.json',
+            'stages_overview': self.race_dir / 'stages_overview',
+            'stages_dir': self.race_dir / 'stages/',
+            'roadbook': self.race_dir / 'roadbook.pdf',
+            'teams_pdf': self.race_dir / 'teams.pdf',
+            'urls': self.race_dir / 'urls.json',
+            'calibration': self.race_dir / 'calibration.pdf',
+            'profile_adjustments': (self.race_dir
                                     / 'profile_adjustments.csv'),
         }
 
@@ -96,7 +102,7 @@ class Roady:
                   If you run rd.calib_profiles it will make a pdf with
                   calibration scales for each profile.
                   Record the left and right adjustments, and 
-                  save to tour_dir / 'profile_adjustments.csv'
+                  save to race_dir / 'profile_adjustments.csv'
                   use these in l_kms_marg and r_kms_marg args
                   of make_stage_page.
                   """)
@@ -107,9 +113,6 @@ class Roady:
                 self.fps['profile_adjustments'], index_col='stage'
             )
 
-        # first specify the filepaths - each of which will then be populated
-        # if required / possible
-
         # only need the URLS if downloading but may as well load
         # (wrong urls a major source of problems)
         self.urls = self.get_urls()
@@ -117,8 +120,8 @@ class Roady:
         print('\n1. OVERALL ROUTE IMG')
         if not self.fps['route'].exists():
             print('-> downloading..', end="")
-            download_img(self.urls['route'], self.fps['route'])
-            print('OK')
+            self.history.append(
+                dl_img(self.urls['route'], self.fps['route']))
         else:
             print('already on disk')
 
@@ -150,6 +153,7 @@ class Roady:
 
         # STAGES OVERVIEW is sometimes available
         # only place to get the distance and 'type' of the stage 
+        # TODO get it from procyclingstats
         print('\n3. STAGES OVERVIEW')
         if not self.fps['stages_overview'].exists():
             print('downloading..', end=" ")
@@ -170,11 +174,9 @@ class Roady:
         self.stages = []
         stage_no = 0
 
+        self.history = []
+
         while True:
-            # if have stages_overview then don't need to infer whether done yet
-            if no_stages is not None and len(self.stages) == no_stages:
-                print('Asked for', no_stages, 'got', len(self.stages))
-                break
             if self.stages_overview and stage_no == len(self.stages_overview):
                 print('Already got', len(self.stages), 'stages, so stopping')
                 break
@@ -194,8 +196,13 @@ class Roady:
             if not data_fp.exists():
                 url = self.urls['stage_bases']['main'].format(stage_no)
                 print(f'need to download data json from {url}..')
-                data = scrape_stage(url)
-                print('ok')
+                try:
+                    data = scrape_cs_stage_url(url)
+                    print('ok')
+                except:
+                    print('FAIL')
+                    self.history.append({'element': 'stage_data',
+                                          'stage': stage_no, 'url': url})
 
                 # this is where infer if finished, if don't have overview
                 if data is None:
@@ -226,16 +233,16 @@ class Roady:
             route_jpg_fp = stage_dir / 'route.jpg'
             if not route_jpg_fp.exists():
                 print('looking to download route jpg..', end=" ")
-                download_img(stage['route'], route_jpg_fp)
-                print('ok')
+                self.history.append(
+                    dl_img(stage['route'], route_jpg_fp))
             else:
                 print('getting route jpg from disk')
 
             profile_jpg_fp = stage_dir / 'profile.jpg'
             if not profile_jpg_fp.exists():
                 print('looking to download profile jpg..', end=" ")
-                download_img(stage['profile'], profile_jpg_fp)
-                ('ok')
+                self.history.append(
+                    dl_img(stage['profile'], profile_jpg_fp))
             else:
                 print('getting profile jpg from disk')
 
@@ -246,13 +253,12 @@ class Roady:
                     fp = stage_dir / title
                     if not fp.exists():
                         print('getting extra jpg', title, end='.. ')
-                        try:
-                            download_img(j, fp)
-                            ('ok')
-                        except:
-                            print('cannot get', j)
+                        self.history.append(dl_img(j, fp))
                     else:
                         print('already have extra jpg', title, 'on disk')
+
+        print('RESULTS')
+        print(self.history)
 
     def get_urls(self, test=True):
         if not self.fps['urls'].exists():
@@ -277,16 +283,15 @@ class Roady:
         #           ' the templates for that tour in /constants.py or somthing')
         return urls
 
-
     def get_fps(self):
         return {
-            'urls': self.tour_dir / 'urls.json',
-            'route': self.tour_dir / 'route.jpg',
-            'teams': self.tour_dir / 'teams.json',
-            'stages_overview': self.tour_dir / 'stages_overview',
-            'stages_dir': self.tour_dir / 'stages/',
-            'roadbook': self.tour_dir / 'roadbook.pdf',
-            'teams_pdf': self.tour_dir / 'teams.pdf',
+            'urls': self.race_dir / 'urls.json',
+            'route': self.race_dir / 'route.jpg',
+            'teams': self.race_dir / 'teams.json',
+            'stages_overview': self.race_dir / 'stages_overview',
+            'stages_dir': self.race_dir / 'stages/',
+            'roadbook': self.race_dir / 'roadbook.pdf',
+            'teams_pdf': self.race_dir / 'teams.pdf',
         }
 
     def __get_value__(self, name):
@@ -338,7 +343,7 @@ class Roady:
                 stage_str, kind = page.split()
                 stage_no = int(stage_str)
                 stage = self.stages[stage_no - 1]
-                stage_dir = self.tour_dir / 'stages' / f"stage_{stage_no}"
+                stage_dir = self.race_dir / 'stages' / f"stage_{stage_no}"
 
                 if kind == 'main':
                     l_adj, r_adj = (
@@ -383,7 +388,7 @@ class Roady:
         """
         Draw profile for each stage with lines to calibrate start/finish
         """
-        fp_out = self.tour_dir / 'calibration.pdf'
+        fp_out = self.race_dir / 'calibration.pdf'
         canvas = Canvas(fp_out.as_posix())
         for stage in self.stages:
             stage_dir = self.fps['stages_dir'] / f"stage_{stage['stage_no']}"
@@ -393,6 +398,12 @@ class Roady:
             canvas.showPage()
         print('saving calibration to', canvas._filename)
         canvas.save()
+
+    def check_resources(self):
+        """
+        Check what is downloaded and what is missing
+        """
+        pass
 
 
 def compose_stage(raw_stage, overview):

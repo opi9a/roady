@@ -128,6 +128,15 @@ def make_front_page(stages, img_fp, canvas=None, fp_out=None, tour=None, year=No
 
     canvas.showPage()
 
+# def calibrate_profile():
+#     # PROFILE
+#     rect = Rect(top=(top - top_margin), height=14, right=right, left=left)
+#     print('rect in scale', rect.height / rect.width)
+#     prof_rect = draw_rect_img(
+#         img_fp=Path(stage_dirpath) / 'profile.jpg',
+#         canvas=canvas,
+#         rect=rect
+#     )
 
 @stand_alone
 def make_stage_page(stage_dict, stage_dirpath, canvas=None, fp_out=None, 
@@ -148,7 +157,7 @@ def make_stage_page(stage_dict, stage_dirpath, canvas=None, fp_out=None,
     x, y = 0, 0
 
     top = 27
-    bottom = 2
+    bottom = 1
     left = 2
     right = 18
     top_margin = 1
@@ -172,8 +181,8 @@ def make_stage_page(stage_dict, stage_dirpath, canvas=None, fp_out=None,
     # calibration
     # add lines to manually check where km0 / finish are
     if calibrate_profile:
-        mm_inward = 21
-        seg_l = 0.3
+        mm_inward = 31
+        seg_l = 0.4
         i = 0
         canvas.setFontSize(3)
         canvas.setStrokeColor('red', alpha=0.5)
@@ -182,7 +191,7 @@ def make_stage_page(stage_dict, stage_dirpath, canvas=None, fp_out=None,
 
             x_left = prof_rect.left + (i * 0.1)
             x_right = rect.right - (i * 0.1)
-            cal_top = prof_rect.top
+            cal_top = prof_rect.bottom + 3
 
             # mm marks above
             canvas.drawCentredString(
@@ -221,6 +230,9 @@ def make_stage_page(stage_dict, stage_dirpath, canvas=None, fp_out=None,
 
 
             i += 1
+
+        # canvas.showPage()
+        return
 
 
     # ADD A TO-GO SCALE TO THE PROFILE
@@ -273,7 +285,7 @@ def make_stage_page(stage_dict, stage_dirpath, canvas=None, fp_out=None,
     route_dims = draw_rect_img(
         img_fp=stage_dirpath / 'route.jpg',
         canvas=canvas,
-        rect=Rect(bottom=bottom, height=14, right=right, left=left),
+        rect=Rect(bottom=bottom, height=10, right=right, left=left),
     )
 
     # ends the page
