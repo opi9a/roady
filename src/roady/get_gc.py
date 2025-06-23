@@ -1,6 +1,5 @@
-from procyclingstats import Stage, Team, Race
+from procyclingstats import Stage, Team
 import pandas as pd
-import json
 from datetime import datetime
 from pathlib import Path
 from reportlab.pdfgen.canvas import Canvas
@@ -8,143 +7,86 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 
 from .constants import DATA_DIR
+from .get_teams import sanitize_team, sanitize_rider
 
 PCS_TOURS = {
-    'italy': 'giro-d-italia',
-    'france': 'tour-de-france',
-    'spain': 'vuelta-a-espana',
+    'giro': 'giro-d-italia',
+    'tour': 'tour-de-france',
+    'vuelta': 'vuelta-a-espana',
+    'dauphine': 'dauphine',
 }
 
-"""
-Makes pdfs for gc PRIOR TO stages (so won't do stage 1)
-Needs stage overviews etc already done
-Quick start, should put a pdf in each stage:
-    >>> update_tour_gcs('france', 2025)
-"""
 
-class Tour:
-    def __init__(self, tour, year):
-        """
-        Hold things like filepaths
-        """
-        self.tour = tour
-        self.year = year
-        self.tour_dir = DATA_DIR / f"{tour}_{year}"
-        self.pcs_tour = PCS_TOURS[tour]
-        self.pcs_tour_url = f'race/{self.pcs_tour}/{year}'
-
-        stages_overview_fp = self.tour_dir / 'stages_overview'
-
-        if not stages_overview_fp.exists():
-            print('cant load stages overview from', stages_overview_fp)
-            self.stages_df = None
-        else:
-            with open(stages_overview_fp, 'r') as fp:
-                stages_overview = json.load(fp)
-            df = pd.DataFrame(stages_overview)
-            df['dt'] = df['date'].apply(
-                lambda x: datetime.strptime(f"{x}-{year}", "%d-%m-%Y")
-            )
-            self.stages_df = df[['stage', 'dt', 'title',
-                                 'distance', 'type']].set_index('stage')
-
-    def __repr__(self):
-        return self.tour_dir.name
-
-
-def update_tour_gcs(country, year=2025, race=None):
-    """
-    Go off date, and make gc csvs / pdfs for all
-    stages that are complete and which don't have them
-    """
-    tour = Tour(country, year)
-
-    print(f'updating {country} {year}')
-    for stage_no, fields in tour.stages_df.iterrows():
-
-        print(str(stage_no).rjust(3), end=": ")
-        if stage_no ==1:
-            print('not trying for stage 1')
-            continue
-
-        if fields['dt'] >= datetime.now():
-            print(f'stage {stage_no} is today or later')
-            continue
-
-        stage_dir = tour.tour_dir / 'stages' / f'stage_{stage_no}'
-        csv_fp = stage_dir / 'gc.csv'
-        pdf_fp = stage_dir / 'gc.pdf'
-
-        if pdf_fp.exists():
-            print('already have pdf')
-            continue
-
-        print('..getting..', end=" ")
-        print_stage_gc(stage_no, csv_fp=csv_fp, pdf_fp=pdf_fp,
-                       country=country, year=year)
-
-
-def print_stage_gc(stage_no, country='italy', year=2025,
-                   csv_fp=None, pdf_fp=None):
+def print_stage_gc(stage_no, race='dauphine_2025', df=None):
     """
     Make a pdf of the stage gc
     """
-    tour_dir = DATA_DIR / f"{country}_{year}"
-    stage_dir = tour_dir / 'stages' / f'stage_{stage_no}'
-    if csv_fp is None:
-        csv_fp = stage_dir / 'gc.csv'
-    if pdf_fp is None:
-        pdf_fp = stage_dir / 'gc.pdf'
+    stage_no = int(stage_no)
+    tour_dir = DATA_DIR / race
+    stage_dir = tour_dir / f'stage_{stage_no}'
+    csv_fp = stage_dir / 'gc.csv'
+    pdf_fp = stage_dir / 'gc.pdf'
 
-    if csv_fp.exists():
-        df = pd.read_csv(csv_fp, index_col='pos')
-    else:
-        df = get_stage_gc(stage_no, country, year)
+    if df is None:
+        if csv_fp.exists():
+            df = pd.read_csv(csv_fp, index_col='pos')
+        else:
+            df = get_stage_gc(stage_no, race)
 
     can = Canvas(pdf_fp.as_posix())
 
-    can.setFontSize(18)
-    can.drawString(5*cm, 27*cm, f"Starting GC, Stage {stage_no}")
+    can.setFont('Helvetica-Bold', 18)
+    can.drawString(6*cm, 28*cm, f"Starting GC, Stage {stage_no}")
 
-    y = 26
+    y = 27
     row_h = 0.7
-    l_marg = 3
-    bottom = 3
 
-    can.setFontSize(11)
+    # rect.draw(can)
+    can.setFont('Helvetica', 14)
     for pos, rider in df.iterrows():
-        x = l_marg
+        x = 0.55
         can.drawString(x*cm, y*cm, str(pos))
         x += 1.5
         can.drawString(x*cm, y*cm, rider['rider_name'])
-        x += 7
-        can.drawString(x*cm, y*cm, rider['team_abbr'])
-        x += 2
+        x += 9
+        can.drawString(x*cm, y*cm,
+                       rider['team_name'].replace('Team', '').strip())
+        x += 5
         can.drawString(x*cm, y*cm, rider['gap'])
         y -= row_h
-        if y <= bottom:
-            break
 
-    print('saving pdf to stage directory')
+    print('saving to', can._filename)
     can.showPage()
     can.save()
 
 
-def get_stage_gc(stage_no, country='italy', year=2025):
+def get_stage_gc(stage_no, race='dauphine_2025',
+                 return_df=True):
     """
     Gets the gc BEFORE the pased stage and saves as csv
     """
+    stage_no = int(stage_no)
 
     if stage_no == 1:
         print('no gc before stage 1')
         return
 
-    pcs_tour = PCS_TOURS[country]
+    name, edition = race.split('_')
+    pcs_tour = PCS_TOURS[name]
 
-    stage = Stage(f'race/{pcs_tour}/{year}/stage-{stage_no-1}')
-    tour_dir = DATA_DIR / f"{country}_{year}"
+    stage = Stage(f'race/{pcs_tour}/{edition}/stage-{stage_no-1}')
+    race_dir = DATA_DIR / f"{name}_{edition}"
 
-    df = pd.DataFrame(stage.gc())
+    gc_dict = stage.gc()
+
+    if not gc_dict:
+        print('no gc found - presumably dont exist yet')
+        return
+
+    if not return_df:
+        return gc_dict
+
+    df = pd.DataFrame(gc_dict)
 
     df['time_s'] = df['time'].apply(get_secs)
     df['gap_s'] = df['time_s'] - df.loc[0, 'time_s']
@@ -155,21 +97,24 @@ def get_stage_gc(stage_no, country='italy', year=2025):
     df.index.name = 'pos'
 
     # look up the team's abbr
-    teams = pd.read_csv(tour_dir / 'teams.csv', index_col='name')
-    df['team_abbr'] = df['team_name'].apply(
-        lambda x: teams.loc[x, 'abbreviation'])
+    # teams = pd.read_csv(race_dir / 'teams.csv', index_col='name')
+    # df['team_abbr'] = df['team_name'].apply(
+    #     lambda x: teams.loc[x, 'abbreviation'])
 
-    df['team_name'] = df['team_name'].str.replace('Israel', 'Genocidal')
-    df['team_abbr'] = df['team_abbr'].str.replace('IPT', 'GPT')
+    df['team_name'] = df['team_name'].apply(sanitize_team)
+    # df['team_name'] = df['team_name'].str.replace('Israel', 'Genocidal')
+    # df['team_abbr'] = df['team_abbr'].str.replace('IPT', 'GPT')
 
     df = df[[
-        'rider_name', 'team_abbr',
+        'rider_name', 'team_name',
+        # 'team_abbr',
         # 'rider_number', 'team_name', 'time', 'bonus_s',
         'gap',
     ]]
 
+    df['rider_name'] = df['rider_name'].apply(sanitize_rider)
 
-    stage_dir = tour_dir / 'stages' / f'stage_{stage_no}'
+    stage_dir = race_dir / f'stage_{stage_no}'
     fp = stage_dir / 'gc.csv'
 
     print('printing to', fp)

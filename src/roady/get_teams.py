@@ -1,8 +1,56 @@
 from procyclingstats import RaceStartlist
-from .URLS import make_pcs_url
+from .urls import make_pcs_url
+
+"""
+I think that to get the underlying list of teams from PCS you have to
+use the /teams object from procyclingstats.Stage, eg:
+
+"""
+
+
+# a list of understandable tags that can be found in full names and
+# used in their place
+TEAMTAGS = [
+    'UAE', 'Visma', 'Jayco', 'Ineos', 'Lidl', 'Decathlon', 'Bahrain',
+    'Quick-Step', 'Bora', 'FDJ', 'Alpecin', 'EF', 'Lotto', 'Israel',
+    'Cofidis', 'Movistar', 'Arkéa', 'Arkea', 'Intermarché', 'Intermarche',
+    'Picnic', 'Astana', 'Uno-X', 'TotalEnergies', 'Tudor',
+    'dsm', 'Q36.5', 'Bardiani', 'Polti', 'Vini Fantini', 'Euskatel', 'Euskadi',
+    'Burgos',
+    'Caja Rural', 'Kern Pharma'
+]
+def sanitize_team(team):
+    """
+    Return a good name
+    """
+    tags = [x for x in TEAMTAGS if x.lower() in team.lower()]
+
+    if tags:
+        tag = tags[0]
+    else:
+        print('cannot find a tag for', team)
+        return team
+
+    if tag == 'Israel':
+        return 'Genocidal'
+
+    if tag in ['dsm', 'Picnic']:
+        return 'Picnic-Post'
+
+    if tag == 'Bardiani':
+        return 'Voo Effay Bardiani'
+
+    if tag == 'Euskadi':
+        return 'Euskatel'
+
+    if tag == 'FDJ':
+        return 'Groupama-FDJ'
+
+    return tag
+
 
 def make_teams_dict(pcs_json=None, pcs_startlist_url=None,
-                    race=None):
+                    race=None, sanitize=True):
     """
     Pass the parsing output, return the teams in format for printing
 
@@ -23,9 +71,23 @@ def make_teams_dict(pcs_json=None, pcs_startlist_url=None,
         if rider['team_name'] not in teams:
             teams[rider['team_name']] = {}
 
-        teams[rider['team_name']][rider['rider_number']] = rider['rider_name']
+        if rider['rider_number'] is None:
+            number = len(teams[rider['team_name']]) + 1
+        else:
+            number = rider['rider_number']
 
-    return teams
+        name = sanitize_rider(rider['rider_name'])
+        teams[rider['team_name']][number] = name
+
+    if not sanitize:
+        return teams
+
+    out = {}
+
+    for team, riders in teams.items():
+        out[sanitize_team(team)] = riders
+
+    return out
 
 
 def get_pcs_teams(pcs_url):
@@ -76,4 +138,31 @@ def get_cs_teams(url=None, soup=None, just_return_soup=False):
     return teams
 
 
+def sanitize_rider(rider):
+    """
+    Make them good
+    """
+
+    if 'sepp' in rider.lower():
+        return 'CUCK Sepp'
+
+    if 'vingegaard' in rider.lower():
+        return 'VINEGARED Jonas'
+
+    if 'jhon' in rider.lower():
+        return 'NARVAEZ Johnathan'
+
+    if 'remco' in rider.lower():
+        return 'REMCO'
+
+    if 'soler' in rider.lower():
+        return 'SUNSHINE Mister'
+
+    if 'lipowitz' in rider.lower():
+        return 'FLIPPOWITZ Lorian'
+
+    if 'ganna' in rider.lower():
+        return 'GAN-NA Filippo'
+
+    return rider
 

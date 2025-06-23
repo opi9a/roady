@@ -5,20 +5,22 @@ import json
 import pandas as pd
 import procyclingstats
 
-from .constants import DATA_DIR
-from .urls import make_pcs_url, infer_name_edition_stage
+from .constants import DATA_DIR, LOG
+from .urls import make_cs_url, make_pcs_url 
 from .Image import Image, tag_stage_imgs
 from .parse_cs import parse_cs_stage_html
 from .get_resources import get_resource
+from .get_gc import get_stage_gc, print_stage_gc
 
 
 class Stage:
 
-    def __init__(self, cs_url, race_dpath=None):
+    def __init__(self, race, stage_no, race_dpath=None, check=False,
+                 get_gc=False):
         """
 
-        Wrapper for cs and pcs data using passed cs_url and race dpath
-        >>> st = Stage(<cyclinstage cs_url>, '../dauphine_2025')
+        Wrapper for cs and pcs data using passed race, number and optional dpath
+        >>> st = Stage('dauphine_2025', 3, '../dauphine_2025')
 
         cs_url is required, as this is not easily inferred.
         race, edition, pcs_url and race_dpath inferred from it
@@ -33,41 +35,52 @@ class Stage:
 
         Tags image urls as 'profile', 'route', 'other'
         """
-        # main input parameter and source for cs data
-        self._cs_url = cs_url
 
         # infer main things from the cs_url
-        deets = infer_name_edition_stage(cs_url)
-        self._name, self._edition, self.stage_no = deets
+        self._name, self._edition = race.split('_')
+        self.stage_no = str(stage_no)
         self._race = f"{self._name}_{self._edition}"
-        self._stage_int = int(self.stage_no) - 1
+        self._stage_ind = stage_no - 1
 
-        # pcs source urls
+        # source urls
         self._pcs_url = make_pcs_url(
             self._race, kind='stage', stage_no=self.stage_no)
-        self._pcs_data_url = make_pcs_url(self._race, 'stage', self.stage_no)
+        self._pcs_data_url = make_pcs_url(
+            self._race, 'stage', self.stage_no)
         self._pcs_img_urls_source_url = make_pcs_url(
             self._race, 'stage_resources', self.stage_no)
 
+        self._cs_url = make_cs_url(race, stage_no)
+
         # paths
         if race_dpath is None:
-            race_dpath = DATA_DIR / f"{self._name}_{self._edition}"
+            race_dpath = DATA_DIR / f"{race}"
 
         self.dpath = Path(race_dpath) / f"stage_{self.stage_no}"
 
         if not self.dpath.exists():
             self.dpath.mkdir()
 
-        # DATA MODEL
-        # xresources
-        # the cs source html (file hidden)
+        # get external resources as per DATA MODEL
+        # the cs source html is cached (file hidden)
         self._cs_html = get_resource(
             url=self._cs_url,
             fpath=self.dpath / '.cs.html',
             parser='html',
         )
 
+        # handy to finish parsing cs_html right now, so 
+        if (self.dpath / '.cs_data.json').exists():
+            with open(self.dpath / '.cs_data.json', 'r') as fp:
+                self._cs_data = json.load(fp)
+        else:
+            self._cs_data = parse_cs_stage_html(self._cs_html)
+            with open(self.dpath / '.cs_data.json', 'w') as fp:
+                json.dump(self._cs_data, fp, indent=4)
+
+
         # the main pcs Stage api data (file hidden)
+        # note this is
         self._pcs_data = get_resource(
             url=self._pcs_data_url,
             fpath=self.dpath / '.pcs_data.json',
@@ -82,29 +95,84 @@ class Stage:
         )
 
         # processing
-        self._cs_data = parse_cs_stage_html(self._cs_html)
-        self._pcs_img_urls_tags = self._tag_imgs('pcs')
-        self._cs_img_urls_tags = self._tag_imgs('cs')
-        self.cs_imgs = self._get_cs_imgs()
-        self.pcs_imgs = self._get_pcs_imgs()
+        self._img_urls_tags = tag_imgs(self)
 
         # # public stuff
-        self.departure = self._pcs_data.get('departure')
-        self.arrival = self._pcs_data.get('arrival')
-        self.date = self._pcs_data.get('date')
-        if self.date is not None:
-            self.dt = datetime.strptime(self.date, "%Y-%m-%d")
-        else:
-            self.dt = None
-        self.distance = self._pcs_data.get('distance')
-        self.type = self._pcs_data.get('stage_type')  # 'RR'/ 'ITT'/'TTT'
-        self.vertical_meters = self._pcs_data.get('vertical_meters')
-        self.profile_icon = self._pcs_data.get('profile_icon')
-        self.start_time = self._pcs_data.get('start_time')
+        self.data = self._get_data()
         self.climbs_df = self._get_climbs_df()
-        self.climbs = self.climbs_df.T.to_dict()
-        self.description = self._cs_data.get('description')
-        self.blurb = self._cs_data.get('blurb')
+
+        # probably most important: profile and route imgs
+        # can edit img_urls_tags.json to get these right,
+        # and call self.imgs() directly
+        _ = self.imgs()
+
+        if check:
+            self.check()
+
+    def _get_data(self):
+        """
+        Bring together info from cs and pcs
+        """
+
+        out = self._pcs_data
+
+        out['description'] = self._cs_data.get('description')
+        out['blurb'] = self._cs_data.get('blurb')
+
+        if out['date'] is not None:
+            out['dt'] = datetime.strptime(out['date'], "%Y-%m-%d").date()
+        else:
+            out['dt'] = None
+
+        out['cs_date'] = self._cs_data.get('date')
+        out['from_to'] = self._cs_data.get('from_to')
+        out['cs_parsed_distance'] = self._cs_data.get('parsed_distance')
+
+        return out
+
+    def imgs(self):
+        """
+        Return dict of Images for cs and pcs profile and route,
+        based on their tags in img_urls_tags.json
+
+        Go through self._img_urls_tags and just assign
+        """
+        out = {
+            'pcs': {'profile': None, 'route': None, 'others': []},
+            'cs': {'profile': None, 'route': None, 'others': []},
+        }
+
+        for source, imgs in self._img_urls_tags.items():
+
+            dpath = self.dpath / f"{source}_imgs"
+            if not dpath.exists():
+                dpath.mkdir()
+
+            if imgs is None:
+                continue
+
+            for img in imgs:
+                if img['tag'] == 'profile':
+                    if out[source]['profile'] is not None:
+                        print('two profiles found')
+                    out[source]['profile'] = Image(
+                        img['url'], dpath, tag='profile')
+                elif img['tag'] == 'route':
+                    if out[source]['route'] is not None:
+                        print('two routes found')
+                    out[source]['route'] = Image(
+                        img['url'], dpath, tag='route')
+                elif img['tag'] == 'other':
+                    out[source]['others'].append(
+                        Image(img['url'], dpath, tag='other'))
+
+            if out[source]['profile'] is None:
+                LOG.info(f'no {source} profile for stage, {self.stage_no}')
+
+            if out[source]['route'] is None:
+                LOG.info(f'no {source} profile for stage, {self.stage_no}')
+
+        return out
 
     def _get_climbs_df(self):
         """
@@ -132,13 +200,19 @@ class Stage:
             # use the climb url as key to get its detail
             records = [x for x in race_climbs
                        if x['climb_url'] ==  stage_climb['climb_url']]
+            if not records:
+                print('cannot find', stage_climb['climb_name'],
+                      'in race climbs')
             out.extend(records)
+
+        if not out:
+            return pd.DataFrame()
 
         df = pd.DataFrame(out)
         df.columns = ['name', 'url', 'length_km',
                       'perc', 'alt_m', 'km_to_go']
         df['start_km_to_go'] = df['km_to_go'] + df['length_km']
-        df['km'] = self.distance - df['km_to_go']
+        df['km'] = self.data['distance'] - df['km_to_go']
         df['start_km'] = df['km'] - df['length_km']
         df = df.set_index('km_to_go').drop('url', axis=1)
         df = df.sort_index(ascending=False)
@@ -160,38 +234,6 @@ class Stage:
 
         return out
 
-    def _tag_imgs(self, source):
-        """
-        Useful to have these separate from rest of cs_data,
-        so can edit on disk.  The imgs are created from this, not
-        cs_data
-
-        Source is cs or pcs
-        """
-        
-        fpath = self.dpath / f'{source}_img_urls_tags.json'
-        
-        if not fpath.exists():
-            if source == 'cs':
-                data = tag_stage_imgs(self._cs_data['img_urls'])
-            elif source == 'pcs':
-                with open(self.dpath.parent
-                          / '.pcs_profile_img_urls.json', 'r') as fp:
-                    pcs_profile_urls = json.load(fp)
-
-                profile_url = pcs_profile_urls[self._stage_int]
-
-                data = tag_stage_imgs(self._pcs_img_urls, profile_url)
-
-            with open(fpath, 'w') as fp:
-                json.dump(data, fp, indent=4)
-
-        else:
-            with open(fpath, 'r') as fp:
-                data = json.load(fp)
-
-        return data
-
     def _get_cs_imgs(self):
         """
         Return a list of Image objects made from urls in cs data
@@ -205,15 +247,6 @@ class Stage:
         return [Image(img['url'], download_dir, img['tag'])
                 for img in data]
     
-    def check(self):
-        """
-        cs and pcs data (how much?)
-        imgs - profile and route
-        climbs
-        gc?
-        """
-        pass
-
     def make_pdf(self, pages=2):
         """
         Page 1:
@@ -225,7 +258,140 @@ class Stage:
         Page 1:
             other imgs
         """
-        pass
+        print('not yet implemented')
+
+    def get_gc_df(self, make_pdf=False):
+        """
+        Return a df of the gc for BEFORE the stage
+        """
+        df = get_stage_gc(self.stage_no, self._race)
+
+        if make_pdf:
+            print_stage_gc(self.stage_no, self._race, df=df)
+
+        return df
+
+    def check(self, verbose=False):
+        """
+        cs and pcs data (how much?)
+        imgs - profile and route
+        climbs
+        gc?
+        """
+        pad = 20
+
+        print(f'Stage {self.stage_no.rjust(2)}:', end=" ")
+
+        out = []
+        for param in [
+            'date', 'departure', 'arrival', 'distance', 'stage_type',
+            'vertical_meters', 'description', 'blurb'
+        ]:
+
+            x = self.data.get(param)
+
+            if x is None:
+                out.append(f" {param.ljust(pad)} : X")
+            elif verbose:
+                out.append(f" {param}".ljust(pad), ": ok")
+
+        # images
+        imgs = self.imgs()
+
+        for source, tags in imgs.items():
+            for tag, data in tags.items():
+                if tag == 'others':
+                    continue
+                else:
+                    img = data
+                if img is None or 'http' not in img.url:
+                    out.append("".join([f" {source}/{tag} url".ljust(pad), ": X"]))
+                elif verbose:
+                    out.append(f" {source}/{tag} url".ljust(pad), ": ok")
+
+        if len(out) == 0:
+            print('OK')
+        else:
+            print()
+            for err in out:
+                print(err)
+            print()
+
+
+    def series(self):
+        """
+        Key data in a pd.Series
+        """
+        out = {
+            k: self.data[k] for k in
+            ['dt', 'departure', 'arrival', 'distance',
+                  'stage_type', 'vertical_meters']
+        }
+        out['no_climbs'] = len(self.climbs_df)
+
+        if len(self.climbs_df):
+            out['summit_finish'] = self.climbs_df.index[-1] < 5
+        else:
+            out['summit_finish'] = False
+
+        return pd.Series(out, name=int(self.stage_no))
 
     def __repr__(self):
         return f"Stage('{self._cs_url}')"
+
+
+def tag_imgs(stage):
+    """
+    # unify image tagging, single json with a list of urls
+      for each source.  each url has a tag that can be modified
+      manually in case of problems
+
+    # then have stage.imgs() return them all in a dict with
+      fields for pcs/cs, then profile, route, others =[]
+
+    Returns a list of {'url': url, 'tag': tag} dicts from disk,
+    or making it from the raw urls, for each source.
+
+    TODO
+    If a stage is missing an image tagged as profile or route,
+    can go into the disk files (img_urls_tags.json) and
+    assign manually.
+    """
+    self = stage  # while in dev
+
+    fpath = self.dpath / 'img_urls_tags.json'
+
+    # if json is on disk, just return it
+    if fpath.exists():
+        with open(fpath, 'r') as fp:
+            out = json.load(fp)
+        return out
+
+    # making it
+    out = {
+        'cs': None,
+        'pcs': None
+    }
+
+    # cs is easy..
+    out['cs'] = tag_stage_imgs(self._cs_data['img_urls'])
+
+    # for pcs want to use the parent race list of profile urls
+    with open(self.dpath.parent
+              / '.pcs_profile_img_urls.json', 'r') as fp:
+        pcs_profile_urls = json.load(fp)
+
+    if self._stage_ind < len(pcs_profile_urls):
+        profile_url = pcs_profile_urls[self._stage_ind]
+    else:
+        print(f'looking for {self._stage_ind + 1}th stage but only'
+              f'{len(pcs_profile_urls)} pcs_profile_urls ')
+        profile_url = None
+
+    out['pcs'] = tag_stage_imgs(self._pcs_img_urls, profile_url)
+
+    with open(fpath, 'w') as fp:
+        json.dump(out, fp, indent=4)
+
+    return out
+

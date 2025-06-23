@@ -46,7 +46,62 @@ def parse_cs_race_html(html):
         if re.search(r'route-.*jpg', url):
             out['route_img_url'] = url.replace('-100', '')
 
+    tds = soup.find_all('td')
+
+    out['stage_data'] = []
+    stage = 1
+    i = 0
+    while i < len(tds):
+        td = tds[i]
+        cl = td.get('class', [None])[0]
+
+        if td.text == str(stage) and cl == 'left':
+            out['stage_data'].append({
+                'stage': stage,
+                'date': tds[i+1].text,
+                'title': tds[i+2].text.split(str(stage))[-1].strip(),
+                'distance': float(tds[i+3].text.replace(',', '.')),
+                'type': tds[i+4].text,
+            })
+            i += 5
+            stage += 1
+        else:
+            i += 1
+
     return out
+
+
+def get_stages_overview(html):
+    """
+    The list of stages, with date, title, distance, type
+    """
+
+    soup = BeautifulSoup(html, 'html.parser')
+
+    tds = soup.find_all('td')
+
+    out = []
+    stage = 1
+    i = 0
+    while i < len(tds):
+        td = tds[i]
+        cl = td.get('class', [None])[0]
+
+        if td.text == str(stage) and cl == 'left':
+            out.append({
+                'stage': stage,
+                'date': tds[i+1].text,
+                'title': tds[i+2].text.split(str(stage))[-1].strip(),
+                'distance': float(tds[i+3].text.replace(',', '.')),
+                'type': tds[i+4].text,
+            })
+            i += 5
+            stage += 1
+        else:
+            i += 1
+
+    return out
+
 
 
 def parse_cs_stage_html(html):
@@ -133,3 +188,5 @@ def infer_km(description):
             return float(out)
 
     print('cannot infer km')
+
+

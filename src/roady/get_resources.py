@@ -42,6 +42,12 @@ def get_resource(url, fpath, parser):
 
 
 # PARSER FUNCTIONS
+def cs_race_data(url):
+    """
+    Get html and save
+    """
+    return requests.get(url).text
+
 def html(url):
     """
     Just request the html for passed url
@@ -70,8 +76,14 @@ def pcs_profile_img_urls(url):
     req = requests.get(url)
     soup = BeautifulSoup(req.text, 'html.parser')
 
-    return [f"http://www.procyclingstats.com/{x['src']}"
+    out = [f"http://www.procyclingstats.com/{x['src']}"
             for x in soup.find_all('img')]
+
+    if not out:
+        print('cannot get the pcs profile img urls from main race page')
+        return None
+
+    return out
 
 
 def pcs_route_img_url(url):
@@ -97,14 +109,27 @@ def pcs_startlist(url):
 def pcs_stage_api(url):
     """
     API call
-    will often fail silently for events in future
+    NB parse() method is not available until after race so
+    get attrs individually
     """
-    try:
-        out = procyclingstats.Stage(url).parse()
-    except:
-        print(f'cannot parse procyclingstats.Stage({url})', end=" ")
-        print('- probably because data not there yet')
-        return dict()
+    st = procyclingstats.Stage(url)
+
+    out = {
+        'arrival': st.arrival(),
+        'departure': st.departure(),
+        'date': st.date(),
+        'distance': st.distance(),
+        'climbs': st.climbs(),
+        'profile_icon': st.profile_icon(),
+        'stage_type': st.stage_type(),
+        'vertical_meters': st.vertical_meters(),
+        'profile_icon': st.profile_icon(),
+        'start_time': st.start_time(),
+        'url': st.url,
+        'pcs_points_scale': st.pcs_points_scale(),
+        'profile_score': st.profile_score(),
+    }
+
     return out
 
 
