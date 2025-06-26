@@ -27,8 +27,7 @@ def print_roadbook(race, fpath=None, km_to_go=False):
     make_front_page(race, can)
 
     for st in race.stages:
-        if km_to_go:
-            profile_margins = race._cal_df.iloc[st._stage_ind].values
+        profile_margins = race._cal_df.iloc[st._stage_ind].values
         make_stage_page(st, canvas=can, km_to_go=km_to_go,
                         profile_margins=profile_margins)
 

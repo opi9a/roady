@@ -71,8 +71,10 @@ def make_stage_page(stage, canvas=None, fp=None, gc=False,
 
     else:
         can.setFont('Helvetica-Bold', 18)
-        can.drawString(1*cm, actual1.bottom - 1, 'no route imgs found')
+        can.drawString(1*cm, used['profile'].bottom - 1, 'no route imgs found')
         used['route'] = used['profile']
+        used['route'].bottom -= 1
+        route_tall = False
 
     # CLIMBS
     if route_tall:

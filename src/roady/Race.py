@@ -336,7 +336,7 @@ class Race:
         """
 
         self._load(update=True)
-        self._make
+        self._process
 
         if update_stages:
             for stage in self.stages:
