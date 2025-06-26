@@ -61,12 +61,34 @@ class Stage:
         if not self.dpath.exists():
             self.dpath.mkdir()
 
-        # get external resources as per DATA MODEL
-        # the cs source html is cached (file hidden)
+        # external resources
+        self._cs_html = None
+        self._cs_data = None
+        self._pcs_data = None
+        self._pcs_img_urls = None
+        self._load()  # the function that assigns to attrs above
+
+        # processing
+        # NB these are 'make' or 'tag' functions
+        self._img_urls_tags = None
+        self.data = None
+        self.climbs_df = None
+        self._process()
+
+        # probably most important: profile and route imgs
+        # can edit img_urls_tags.json to get these right,
+        # and call self.imgs() directly
+        _ = self.imgs()
+
+        if check:
+            self.check()
+
+    def _load(self, update=False):
         self._cs_html = get_resource(
             url=self._cs_url,
             fpath=self.dpath / '.cs.html',
             parser='html',
+            update=update
         )
 
         # handy to finish parsing cs_html right now, so 
@@ -78,13 +100,13 @@ class Stage:
             with open(self.dpath / '.cs_data.json', 'w') as fp:
                 json.dump(self._cs_data, fp, indent=4)
 
-
         # the main pcs Stage api data (file hidden)
         # note this is
         self._pcs_data = get_resource(
             url=self._pcs_data_url,
             fpath=self.dpath / '.pcs_data.json',
             parser='pcs_stage_api',
+            update=update
         )
 
         # pcs img urls (file hidden - see tagged version on disk)
@@ -92,24 +114,16 @@ class Stage:
             url=self._pcs_img_urls_source_url,
             fpath=self.dpath / '.pcs_img_urls.json',
             parser='pcs_stage_img_urls',
+            update=update
         )
 
-        # processing
+    def _process(self):
         self._img_urls_tags = tag_imgs(self)
+        self.data = self._make_data()
+        self.climbs_df = self.make_climbs_df()
 
-        # # public stuff
-        self.data = self._get_data()
-        self.climbs_df = self._get_climbs_df()
 
-        # probably most important: profile and route imgs
-        # can edit img_urls_tags.json to get these right,
-        # and call self.imgs() directly
-        _ = self.imgs()
-
-        if check:
-            self.check()
-
-    def _get_data(self):
+    def _make_data(self):
         """
         Bring together info from cs and pcs
         """
@@ -169,23 +183,10 @@ class Stage:
             if out[source]['profile'] is None:
                 LOG.info(f'no {source} profile for stage, {self.stage_no}')
 
-            if out[source]['route'] is None:
-                LOG.info(f'no {source} profile for stage, {self.stage_no}')
+        # SOMTHING IS MISSING HERE
+        # incl make_climbs_df declaration
 
-        return out
-
-    def _get_climbs_df(self):
-        """
-        Get the race climbs from race dir
-        """
-
-        if not self._pcs_data.get('climbs'):
-            return pd.DataFrame()
-
-        # need to load the full detailed climbs from race dir above
-        race_climbs_fp = self.dpath.parent / '.pcs_race_climbs.json'
-
-        if not race_climbs_fp.exists():
+            if out[source]_fp.exists():
             print('cannot find a parent directory with pcs climb details')
             return pd.DataFrame()
 
@@ -219,7 +220,7 @@ class Stage:
 
         return df
 
-    def _get_pcs_imgs(self):
+    def _make_pcs_imgs(self):
         """
         Return a list of Image objects made from urls in data
         """
@@ -234,7 +235,7 @@ class Stage:
 
         return out
 
-    def _get_cs_imgs(self):
+    def _make_cs_imgs(self):
         """
         Return a list of Image objects made from urls in cs data
         """
@@ -335,6 +336,14 @@ class Stage:
             out['summit_finish'] = False
 
         return pd.Series(out, name=int(self.stage_no))
+
+    def update(self):
+        """
+        """
+        self._load(update=True)
+        self._process
+        # imgs too??
+
 
     def __repr__(self):
         return f"Stage('{self._cs_url}')"

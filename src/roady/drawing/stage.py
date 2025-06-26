@@ -11,8 +11,6 @@ def make_stage_page(stage, canvas=None, fp=None, gc=False,
                     km_to_go=True, profile_margins=[4, 4]):
     """
     Draw all elements
-    TODO:
-        read in profile_margins
     """
     if canvas is None:
         can = Canvas(fp.as_posix())

@@ -13,7 +13,7 @@ from .layouts import PORTRAIT
 MAX_ROUTE_H = 12
 
 
-def make_roadbook(race, fpath=None, km_to_go=False):
+def print_roadbook(race, fpath=None, km_to_go=False):
     """
     Draw front page
     Draw each stage

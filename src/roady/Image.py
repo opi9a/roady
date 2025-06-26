@@ -79,7 +79,7 @@ def draw_img(img_fp, rect, canvas=None, fp_out=None,
              trim_bottom_cm=None,
              km_to_go=False, profile_margins=None, stage_km=None,
              add_calibration=False, cal_lims=None):
-    """ 
+    """
     Draws the img, fitting to within the passed max coords
     Returns the dimensions actually drawn, in a rect
     """
@@ -87,13 +87,11 @@ def draw_img(img_fp, rect, canvas=None, fp_out=None,
         can = Canvas(fp_out.as_posix())
     else:
         can = canvas
-    
+
     # make scaled versions
     # take in image -> h, w and rect to draw in h, w
     # create a 3rd rect to actually draw
     i_dict = PILImage.open(img_fp)
-    img_h = i_dict.height
-    img_w = i_dict.width
     # print('image in - h:', img_h, 'w:', img_w, 'shape:', img_h/img_w)
     s_h, s_w = scale_image(
         i_dict.height, i_dict.width, rect.height, rect.width)
@@ -119,21 +117,21 @@ def draw_img(img_fp, rect, canvas=None, fp_out=None,
     # actually draw it
     can.drawInlineImage(
         img_fp.as_posix(),
-        x = actual.left * cm,
-        y = actual.bottom * cm,
-        height = actual.height * cm,
-        width = actual.width * cm,
+        x=actual.left * cm,
+        y=actual.bottom * cm,
+        height=actual.height * cm,
+        width=actual.width * cm,
     )
 
     if trim_bottom_cm is not None:
         can.setFillColor('white')
         can.setStrokeColor('white')
         can.rect(
-            x = actual.left * cm,
-            y = actual.bottom * cm,
-            height = trim_bottom_cm * cm,
-            width = actual.width * cm,
-            fill = True
+            x=actual.left * cm,
+            y=actual.bottom * cm,
+            height=trim_bottom_cm * cm,
+            width=actual.width * cm,
+            fill=True
         )
         actual.bottom += trim_bottom_cm
 
@@ -164,11 +162,11 @@ def add_to_go_scale(canvas, rect, margins, stage_km,
 
     # get the stage distance, d, and the width of the image
     # draw a vertical line each 10km from end
+    breakpoint()
     scale_l = rect.left + (margins[0] / 10)
     scale_r = rect.right - (margins[1] / 10)
     scale_width = scale_r - scale_l
     minor_unit = 1
-
 
     # work out the decrement for the chosen interval (kms)
     dec_1k = scale_width / float(stage_km)
@@ -184,7 +182,7 @@ def add_to_go_scale(canvas, rect, margins, stage_km,
 
     while k_to_go < float(stage_km):
         if k_to_go > 0:
-            
+
             # major units are thicker (by alpha)
             if k_to_go % 10 == 0:
                 canvas.setStrokeAlpha(0.4)
@@ -205,7 +203,7 @@ def add_to_go_scale(canvas, rect, margins, stage_km,
             x_nudge = calc_x_nudge(k_to_go)
             canvas.setFillColor("lightblue", alpha=0.9)  # for text
             canvas.drawString(
-                (line_x - x_nudge)*cm,
+                (line_x - x_nudge)* cm,
                 y1 * cm,  # y2
                 str(k_to_go)
             )
@@ -213,9 +211,9 @@ def add_to_go_scale(canvas, rect, margins, stage_km,
             if k_to_go >= 20:
                 canvas.setFillColor("steelblue", alpha=0.9)  # for text
                 canvas.drawString(
-                    (line_x - x_nudge)*cm,
-                    (y0-0.2)*cm,
-                    # (y_start-0.2)*cm,
+                    (line_x - x_nudge)* cm,
+                    (y0-0.2)* cm,
+                    # (y_start-0.2)* cm,
                     str(k_to_go)
                 )
 
@@ -265,14 +263,14 @@ def calibrate(canvas, rect, lims=None):
 
         # mm marks above
         canvas.drawCentredString(
-            x_left*cm, (cal_top+0.1)*cm, str(i%10))
+            x_left * cm, (cal_top + 0.1) * cm, str(i % 10))
         canvas.drawCentredString(
-            x_right*cm, (cal_top+0.1)*cm, str(i%10))
+            x_right * cm, (cal_top + 0.1) * cm, str(i % 10))
         # mm marks below
         canvas.drawCentredString(
-            (x_left+0.1)*cm, (cal_bottom-0.1)*cm, str((i+1)%10))
+            (x_left + 0.1) * cm, (cal_bottom - 0.1) * cm, str((i + 1) % 10))
         canvas.drawCentredString(
-            (x_right-0.1)*cm, (cal_bottom-0.1)*cm, str((i+1)%10))
+            (x_right - 0.1) * cm, (cal_bottom - 0.1) * cm, str((i + 1) % 10))
 
         for j in range(10):
 
@@ -291,17 +289,17 @@ def calibrate(canvas, rect, lims=None):
                         (x_right - (j * 0.01)) * cm,
                         (l_top - seg_l) * cm,
                         )
-            
+
             if i == 0:
                 # tenth of mm marks on side
                 canvas.drawString(
-                    (x_left - 0.1) *cm,
-                    (cal_top - ((j + 0.5) * seg_l)) *cm,
-                    str(j%10))
+                    (x_left - 0.1) * cm,
+                    (cal_top - ((j + 0.5) * seg_l)) * cm,
+                    str(j % 10))
                 canvas.drawString(
-                    (x_right + 0.1) *cm,
-                    (cal_top - ((j + 0.5) * seg_l)) *cm,
-                    str(j%10))
+                    (x_right + 0.1) * cm,
+                    (cal_top - ((j + 0.5) * seg_l)) * cm,
+                    str(j % 10))
 
 
         i += 1
@@ -326,7 +324,9 @@ def scale_image(i_h, i_w, max_h, max_w):
     return out
 
 
-TEST_IMG_FP = Path('~/shared/my_packages/roady/data/dauphine_2025/stage_1/dauphine-2025-stage-1-profile-n2-ed0465bf55e713e16c31.jpg')
+TEST_IMG_FP = Path('~/shared/my_packages/roady/data/dauphine_2025/',
+                   'stage_1/dauphine-2025-stage-1-profile-n2-ed0465bf55e713e16c31.jpg')
+
 
 def test_draw(rect, img_fp=TEST_IMG_FP,
               fp_out=DATA_DIR / 'testing' / 'draw_img.pdf'):
@@ -351,7 +351,7 @@ def tag_stage_imgs(urls, pcs_profile_url=None):
     """
     For a list of urls, return a list of {url: xx, tag: yy}
     NB purpose is to assign 'route' and 'profile' tags
-    
+
     For PCS the profile url is known, and may be provided here
     (NB this might be in http, not https lol)
     """
@@ -465,5 +465,3 @@ def split_img_url(url):
             out['stage'] = stage
 
     return out
-
-

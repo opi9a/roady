@@ -8,7 +8,7 @@ from .urls import PCS_MAIN
 from .constants import LOG
 
 
-def get_resource(url, fpath, parser):
+def get_resource(url, fpath, parser, update=False):
     """
     Base function for returning external resources:
         download if not existing, and save to disk
@@ -17,28 +17,47 @@ def get_resource(url, fpath, parser):
         return required data
     """
 
-    if not fpath.exists():
+    new_data, old_data = None, None
+
+    # get new data if required
+    if not fpath.exists() or update:
         # look up the parser function
+        func = get_func(parser)
         try:
-            out = get_func(parser)(url)
+            new_data = func(url)
             LOG.info(f'loaded {url} with {parser}')
         except:
             LOG.info(f'cant get {url} with {parser}, returning None')
             return None
 
-        with open(fpath, 'w') as fp:
-            if fpath.name.endswith('json'):
-                json.dump(out, fp, indent=4)
-            elif fpath.name.endswith('html'):
-                fp.write(out)
-    else:
+    # will always want to load existing data if its there
+    if fpath.exists():
         with open(fpath, 'r') as fp:
             if fpath.name.endswith('json'):
-                out = json.load(fp)
+                old_data = json.load(fp)
             elif fpath.name.endswith('html'):
-                out = fp.read()
+                old_data = fp.read()
 
-    return out
+    # if no actually new data to save, just return now
+    if new_data is None or new_data == old_data:
+        return old_data
+
+    if update and fpath.exists():
+        old_path = fpath.parent / f"{fpath.name}.old"
+        print('data has changed, saving old data to', old_path)
+        save_json_or_html(old_data, old_path)
+
+    # save the new data
+    save_json_or_html(new_data, fpath)
+
+    return new_data
+
+def save_json_or_html(data, fpath):
+    with open(fpath, 'w') as fp:
+        if '.json' in fpath.name:
+            json.dump(data, fp, indent=4)
+        elif '.html' in fpath.name:
+            fp.write(data)
 
 
 # PARSER FUNCTIONS

@@ -20,7 +20,11 @@ from .drawing.layouts import PORTRAIT
 
 """
 TODO:
-    implement calibration (read the csv and pass to stage)
+    Update function for races as they come near:
+        teams
+        more / missing imgs (reload urls)
+        (move Stage to self._this_param = self._get_this_param() as Race.py)
+    One dayers?
 
 """
 
@@ -35,23 +39,36 @@ class Race:
 
         Initialise normally with the race name, or dpath
 
-        >>> tdf = Race('tour_24')  # or 2024
+        >>> dp = Race('dauphine_2025')  # or just 25 works
 
-        Main public attrs (type tdf. to see)
-        >>> dp.teams
-        >>> dp.stages
+        Main use is make the roadbook pdf
+        >>> dp.print_roadbook()
 
-        Can then eg:
-        >>> dp.stages['4']
-        >>> dp.stages['4'].distance
-        >>> dp.stages['4'].climbs_df
-        >>> dp.stages['4'].imgs
-
-        calibrate profile img km scales TODO
+        Can draw in km to go lines on profile imgs, but usually needs
+        calibration as the imgs have margins.  To do this, run
         >>> dp.calibrate()
 
-        make the roadbook pdf
-        >>> dp.make_roadbook()
+        which will make a pdf with all the profiles drawn with scales
+        to allow margins to be estimated by eye, and recorded in calibration.csv
+        (the data are in mm)
+        Can then make the roadbook use these margins
+        >>> dp.print_roadbook(km_to_go=True)  # reads from calibration.csv
+
+        Main public attrs used (type tdf. to see)
+        >>> dp.teams
+        >>> dp.stages
+        >>> dp.df  # a table with info for everything
+
+        Most info is in the data attr of stages:
+        >>> dp.stages['4'].data['distance']
+        >>> dp.stages['4'].data['vertical_meters']
+        >>> dp.stages['4'].climbs_df
+
+        The images are a main part
+        >>> dp.stages['4'].imgs
+
+        calibrate profile img km scales manually -> calibration.csv
+        >>> dp.calibrate()
         """
 
         # filesystem and naming etc
@@ -73,13 +90,9 @@ class Race:
             print('making new race dir', self.dpath)
             self.dpath.mkdir()
 
+        # make an empty calibration.csv if not one already
         if not self._calibration_csv_dpath.exists():
-            print('making empty calibration csv')
-            self._cal_df = pd.DataFrame(columns=['l_adj', 'r_adj'],
-                                  index=list(range(1, 22)), data=0)
-            self._cal_df.index.name = 'stage'
-
-            self._cal_df.to_csv(self.dpath / 'calibration.csv', index=True)
+            self._cal_df = make_calibration_csv(self.dpath)
         else:
             with open(self._calibration_csv_dpath, 'r') as fp:
                 self._cal_df = pd.read_csv(self._calibration_csv_dpath,
@@ -89,76 +102,94 @@ class Race:
         self._pcs_url = make_pcs_url(self._race)
 
         # GET PRIMARY DATA
-        # load external resources or their caches
-        # NB most files hidden
-        
-        # First the main cs source
+        # can inspect jsons on disk, see fpath params in _get functions
+        self._cs_html = None
+        self._pcs_race = None
+        self._pcs_race_climbs = None
+        self._pcs_profile_img_urls = None
+        self._pcs_route_img_url = None
+        self._pcs_startlist = None
+        self._load()
+
+        # PROCESSING
+        self._cs_data = None
+        self.teams = None
+        self.cs_route_img = None
+        self.pcs_route_img = None
+        self.stages = None
+        self._process()
+
+        self.stages = self.make_stages()
+        # all data now loaded, can make roadbook
+
+
+    # load external resources or their caches with get_resource()
+    # see the parsing functions for each resource in get_resource.py
+    def _load(self, update=False):
+        # the raw cs html is useful
         self._cs_html = get_resource(
             url=self._cs_url,
             fpath=self.dpath / '.cs.html',
             parser='html',
+            update=update
         )
-
-        # handy to finish parsing cs_html right now, so 
-        if (self.dpath / '.cs_data.json').exists():
-            with open(self.dpath / '.cs_data.json', 'r') as fp:
-                self._cs_data = json.load(fp)
-        else:
-            self._cs_data = parse_cs_race_html(self._cs_html)
-            with open(self.dpath / '.cs_data.json', 'w') as fp:
-                json.dump(self._cs_data, fp, indent=4)
-
-        # Now the main pcs source
+        # the main pcs source
         self._pcs_race = get_resource(
             url=self._pcs_url,
             fpath=self.dpath / '.pcs_race.json',
             parser='pcs_race_api',
+            update=update
         )
-
-        # Not used in Race object - is used by Stage objects,
-        # which don't have all the info. They load from disk.
+        # pcs Race api has a list of all climbs, with full data
+        # - not used in Race object - is read from disk by Stage objects
         self._pcs_race_climbs = get_resource(
             url=f"{self._pcs_url}/route/climbs",
             fpath=self.dpath / '.pcs_race_climbs.json',
             parser='pcs_race_climbs_api',
+            update=update
         )
-
-        # Not used in Race object - is used by Stage objects,
-        # which don't have all the info. They load from disk.
+        # pcs race page has handy list of all profile imgs
+        # - not used in Race object - read from disk by Stage objects
         self._pcs_profile_img_urls = get_resource(
             url=make_pcs_url(self._race, kind='stage_profile_urls'),
             fpath=self.dpath / '.pcs_profile_img_urls.json',
             parser='pcs_profile_img_urls',
+            update=update
         )
-
         # the pcs img for overall route
         self._pcs_route_img_url = get_resource(
             url=make_pcs_url(self._race, kind='route_img'),
             fpath=self.dpath / '.pcs_route_img_url.json',
             parser='pcs_route_img_url',
+            update=update
         )
-
         # the pcs startlist - used for teams
         self._pcs_startlist = get_resource(
             url=make_pcs_url(self._race, kind='startlist'),
             fpath=self.dpath / '.pcs_startlist.json',
             parser='pcs_startlist',
-        )
+            update=update
+    )
 
-        # up to now everything has been external resources,
-        # with a bit of parsing - SHOULD BE ABLE TO CHECK IT ALL ON DISK
+    def _make(self):
+        # parse the cs html
+        if (self.dpath / '.cs_data.json').exists():
+            with open(self.dpath / '.cs_data.json', 'r') as fp:
+                out = json.load(fp)
+        else:
+            out = parse_cs_race_html(self._cs_html)
+            with open(self.dpath / '.cs_data.json', 'w') as fp:
+                json.dump(out, fp, indent=4)
 
-        # processing
+        # make the teams
         self.teams = make_teams_dict(self._pcs_startlist)
+
         self.cs_route_img = Image(self._cs_data['route_img_url'],
                                   self.dpath, fname='cs_route_img')
         self.pcs_route_img = Image(self._pcs_route_img_url,
                                    self.dpath, fname='pcs_route_img')
-        self.stages = self.get_stages()
 
-        # all data now loaded, can make roadbook
-        # self.make_roadbook()
-    def get_stages(self):
+    def make_stages(self):
         """
         Load the stages - now do using pcs
         """
@@ -206,7 +237,7 @@ class Race:
 
         print(f'\nFound {missing} missing params')
 
-    def make_roadbook(self, km_to_go=False):
+    def print_roadbook(self, km_to_go=False):
         """
         Get a canvas
         Draw front page
@@ -214,7 +245,7 @@ class Race:
             draw stage(pages=1 or 2)
         Draw teams
         """
-        make_roadbook(self, km_to_go=km_to_go)
+        print_roadbook(self, km_to_go=km_to_go)
 
     def df(self):
         """
@@ -294,17 +325,62 @@ class Race:
 
         can.save()
 
+    def update(self, update_stages=True):
+        """
+        Use when approaching race and full or more data is available.
 
-        def __repr__(self):
+        Main things are:
+            teams finalized (a few days before start)
+            climbs - race and stage
+            missing imgs added
+        """
 
-            spacing = 16
+        self._load(update=True)
+        self._make
 
-            fields = [k for k in self.__dict__
-                      if 'stage' not in k and not k.startswith('_')]
+        if update_stages:
+            for stage in self.stages:
+                stage.update()
 
-            out = [f"{k.ljust(spacing)}: {self.__dict__[k]}" for k in fields]
+    def __repr__(self):
 
-            return "\n".join(out)
+        spacing = 16
+
+        fields = [k for k in self.__dict__
+                  if 'stage' not in k and not k.startswith('_')]
+
+        out = [f"{k.ljust(spacing)}: {self.__dict__[k]}" for k in fields]
+
+        return "\n".join(out)
+
+
+def make_calibration_csv(dpath, no_days=21, default_margins=None,
+                         overwrite=False):
+    """
+    Make a calibration csv with the passed number of days and default
+    margins (2 elements, l and r).
+    Save it and return the df
+    """
+
+    if default_margins is None:
+        default_margins = [0, 0]
+
+    df = pd.DataFrame([[x] * no_days for x in default_margins]).T
+    df.columns = ['l_adj_mm', 'r_adj_mm']
+    df.index = list(range(1, no_days+1))
+    df.index.name = 'stage'
+
+    fpath = dpath / 'calibration.csv'
+
+    if fpath.exists() and not overwrite:
+        print('there is already a file at', fpath)
+        print('pass overwrite=True if want that')
+        return
+
+    df.to_csv(fpath)
+
+    return df 
+
 
 
 def clean_race(race, dpath=None,
@@ -339,3 +415,5 @@ def clean_race(race, dpath=None,
 
 
         print(stage)
+
+
