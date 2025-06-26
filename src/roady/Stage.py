@@ -183,6 +183,9 @@ class Stage:
             if out[source]['profile'] is None:
                 LOG.info(f'no {source} profile for stage, {self.stage_no}')
 
+            if out[source]['route'] is None:
+                LOG.info(f'no {source} route for stage, {self.stage_no}')
+
         # SOMTHING WAS MISSING HERE
         # incl make_climbs_df declaration
 
