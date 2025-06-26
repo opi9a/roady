@@ -120,7 +120,7 @@ class Stage:
     def _process(self):
         self._img_urls_tags = tag_imgs(self)
         self.data = self._make_data()
-        self.climbs_df = self.make_climbs_df()
+        self.climbs_df = self._make_climbs_df()
 
 
     def _make_data(self):
@@ -191,7 +191,7 @@ class Stage:
 
         return out
 
-    def _get_climbs_df(self):
+    def _make_climbs_df(self):
         """
         Get the race climbs from race dir
         """
@@ -236,54 +236,9 @@ class Stage:
 
         return df
 
-    # def _get_climbs_df(self):
-    #     """
-    #     Get the race climbs from race dir
-    #     """
-
-    #     if not self._pcs_data.get('climbs'):
-    #         return pd.DataFrame()
-
-    #     # need to load the full detailed climbs from race dir above
-    #     race_climbs_fp = self.dpath.parent / '.pcs_race_climbs.json'
-
-
-    #     if out[source]_fp.exists():
-    #         print('cannot find a parent directory with pcs climb details')
-    #         return pd.DataFrame()
-
-    #     with open(race_climbs_fp, 'r') as fp:
-    #         race_climbs = json.load(fp)
-
-    #     out = []
-
-    #     # go through the stage climbs (less detailed)
-    #     for stage_climb in self._pcs_data['climbs']:
-
-    #         # use the climb url as key to get its detail
-    #         records = [x for x in race_climbs
-    #                    if x['climb_url'] ==  stage_climb['climb_url']]
-    #         if not records:
-    #             print('cannot find', stage_climb['climb_name'],
-    #                   'in race climbs')
-    #         out.extend(records)
-
-    #     if not out:
-    #         return pd.DataFrame()
-
-    #     df = pd.DataFrame(out)
-    #     df.columns = ['name', 'url', 'length_km',
-    #                   'perc', 'alt_m', 'km_to_go']
-    #     df['start_km_to_go'] = df['km_to_go'] + df['length_km']
-    #     df['km'] = self.data['distance'] - df['km_to_go']
-    #     df['start_km'] = df['km'] - df['length_km']
-    #     df = df.set_index('km_to_go').drop('url', axis=1)
-    #     df = df.sort_index(ascending=False)
-
-    #     return df
-
     def _make_pcs_imgs(self):
         """
+        IS THIS OBSOLETE?
         Return a list of Image objects made from urls in data
         """
         download_dir = self.dpath / 'pcs_imgs'
@@ -299,6 +254,7 @@ class Stage:
 
     def _make_cs_imgs(self):
         """
+        IS THIS OBSOLETE?
         Return a list of Image objects made from urls in cs data
         """
         data = self._cs_img_urls_tags

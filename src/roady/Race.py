@@ -15,7 +15,7 @@ from .get_teams import make_teams_dict
 from .parse_cs import parse_cs_race_html
 from .get_resources import get_resource
 from .drawing.Rect import Rect
-from .drawing.roadbook import make_roadbook
+from .drawing.roadbook import print_roadbook
 from .drawing.layouts import PORTRAIT
 
 """
@@ -171,15 +171,15 @@ class Race:
             update=update
     )
 
-    def _make(self):
+    def _process(self):
         # parse the cs html
         if (self.dpath / '.cs_data.json').exists():
             with open(self.dpath / '.cs_data.json', 'r') as fp:
-                out = json.load(fp)
+                self._cs_data = json.load(fp)
         else:
-            out = parse_cs_race_html(self._cs_html)
+            self._cs_data = parse_cs_race_html(self._cs_html)
             with open(self.dpath / '.cs_data.json', 'w') as fp:
-                json.dump(out, fp, indent=4)
+                json.dump(self._cs_data, fp, indent=4)
 
         # make the teams
         self.teams = make_teams_dict(self._pcs_startlist)
