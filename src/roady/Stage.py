@@ -183,10 +183,24 @@ class Stage:
             if out[source]['profile'] is None:
                 LOG.info(f'no {source} profile for stage, {self.stage_no}')
 
-        # SOMTHING IS MISSING HERE
+        # SOMTHING WAS MISSING HERE
         # incl make_climbs_df declaration
 
-            if out[source]_fp.exists():
+        return out
+
+    def _get_climbs_df(self):
+        """
+        Get the race climbs from race dir
+        """
+
+        if not self._pcs_data.get('climbs'):
+            return pd.DataFrame()
+
+        # need to load the full detailed climbs from race dir above
+        race_climbs_fp = self.dpath.parent / '.pcs_race_climbs.json'
+
+
+        if out[source]_fp.exists():
             print('cannot find a parent directory with pcs climb details')
             return pd.DataFrame()
 
